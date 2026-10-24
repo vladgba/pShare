@@ -38,6 +38,12 @@ Apps can't read their own Bluetooth MAC address (since Android 6), so the receiv
 classic discovery: the sender asks to become visible, listens on a per-session RFCOMM UUID, and only it
 accepts that UUID, so other phones are rejected quickly. Insecure RFCOMM avoids the pairing dialog on most phones.
 
+## Quick Settings shortcut
+
+Edit your phone's Quick Settings panel and add **Send files** (Send Anyway).
+Tap the tile to choose one or more files and open the normal sending screen.
+If the phone is locked, unlock it first when prompted. Canceling the picker returns to the app.
+
 ## Security
 
 The pairing QR carries a random 32-byte key. Every frame on LAN/Bluetooth is AES-256-GCM encrypted.

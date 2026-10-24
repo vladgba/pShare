@@ -85,6 +85,17 @@
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <service
+            android:name=".service.ShareTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_share"
+            android:label="@string/quick_share_tile"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
             android:name=".service.TransferService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />

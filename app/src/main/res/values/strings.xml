@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Send Anyway</string>
+    <string name="quick_share_tile">Send files</string>
     <string name="notif_channel">Transfers</string>
     <string name="notif_sending">Sending to %1$s</string>
     <string name="notif_receiving">Receiving from %1$s</string>

@@ -12,20 +12,14 @@ import android.widget.FrameLayout
 import x.vladgba.sendanyway.R
 
 class MainActivity : Activity() {
+    private var pickingFiles = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        pickingFiles = savedInstanceState?.getBoolean(STATE_PICKING_FILES) ?: false
 
-        findViewById<View>(R.id.btnSendFiles).setOnClickListener {
-            val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "*/*"
-                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-            }
-            @Suppress("DEPRECATION")
-            startActivityForResult(pick, REQ_PICK)
-        }
+        findViewById<View>(R.id.btnSendFiles).setOnClickListener { pickFiles() }
         findViewById<View>(R.id.btnSendFolder).setOnClickListener {
             val pick = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -37,6 +31,37 @@ class MainActivity : Activity() {
         findViewById<View>(R.id.btnReceive).setOnClickListener {
             startActivity(Intent(this, ReceiveActivity::class.java))
         }
+        if (savedInstanceState == null) handleQuickShare()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleQuickShare()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_PICKING_FILES, pickingFiles)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun handleQuickShare() {
+        if (intent.action != ACTION_QUICK_SHARE) return
+        // Consume the request so restoring this activity never reopens the picker.
+        intent.action = null
+        pickFiles()
+    }
+
+    private fun pickFiles() {
+        if (pickingFiles) return
+        val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        }
+        pickingFiles = true
+        @Suppress("DEPRECATION")
+        startActivityForResult(pick, REQ_PICK)
     }
 
     private fun askText() {
@@ -71,6 +96,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PICK) pickingFiles = false
         if (resultCode != RESULT_OK || data == null) return
         when (requestCode) {
             REQ_PICK -> {
@@ -98,8 +124,10 @@ class MainActivity : Activity() {
         }
     }
 
-    private companion object {
-        const val REQ_PICK = 1
-        const val REQ_PICK_FOLDER = 2
+    companion object {
+        const val ACTION_QUICK_SHARE = "x.vladgba.sendanyway.QUICK_SHARE"
+        private const val STATE_PICKING_FILES = "picking_files"
+        private const val REQ_PICK = 1
+        private const val REQ_PICK_FOLDER = 2
     }
 }
