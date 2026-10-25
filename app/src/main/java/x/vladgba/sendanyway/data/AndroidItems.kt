@@ -14,6 +14,7 @@ import x.vladgba.sendanyway.core.DirItem
 import x.vladgba.sendanyway.core.ItemInfo
 import x.vladgba.sendanyway.core.OutgoingItem
 import x.vladgba.sendanyway.core.ReceiveSink
+import x.vladgba.sendanyway.core.ReceivedPaths
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -131,23 +132,84 @@ object Device {
 /**
  * Saves received files to Download/SendAnyway (MediaStore on Android 10+, no permission needed;
  * the app's own external files dir on older versions). Text items are kept in memory.
- * Preserves subfolder structure and supports resuming interrupted downloads via .part files.
+ * Received folders are recreated with their hierarchy, empty ones included; a folder whose name
+ * is taken is saved as "Name (1)" as a whole (see [ReceivedPaths]). Supports resuming interrupted
+ * downloads via .part files; a resumed transfer reuses the folder its first attempt chose.
  * Callbacks are invoked on the worker thread.
  */
 class DownloadSink(
     ctx: Context,
     private val onText: (String) -> Unit,
     private val onFile: (name: String, location: String, uri: Uri?, mime: String) -> Unit,
+    private val onFolder: (name: String, location: String) -> Unit = { _, _ -> },
 ) : ReceiveSink {
     private val app = ctx.applicationContext
     private val resolver = app.contentResolver
     private val stagingDir = File(app.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: app.filesDir, ".staging").apply { mkdirs() }
     private val texts = ConcurrentHashMap<Int, ByteArrayOutputStream>()
+    private val paths = ReceivedPaths(::rootExists)
 
+    /** Remembers the root folders chosen for an unfinished transfer, so a retry resumes into them. */
+    private var rootsFile: File? = null
+    private var filesLeft = 0
+
+    private val scoped get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+
+    /** Real directory behind Download/SendAnyway: the public one on Android 10+, app-specific before. */
+    @Suppress("DEPRECATION")
+    private val baseDir: File
+        get() = if (scoped) File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), FOLDER)
+        else File(app.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: app.filesDir, FOLDER)
+
+    private fun location(relDir: String): String = when {
+        !scoped -> (if (relDir.isEmpty()) baseDir else File(baseDir, relDir)).absolutePath
+        relDir.isEmpty() -> "Download/$FOLDER"
+        else -> "Download/$FOLDER/$relDir"
+    }
+
+    private fun relativePath(relDir: String) =
+        if (relDir.isEmpty()) "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER" else "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER/$relDir"
+
+    /** Keyed by the full sender path, so equal names in different subfolders never share one. */
     private fun partFile(info: ItemInfo): File {
-        val (dir, name) = parsePath(info.name)
-        val key = if (dir.isEmpty()) name else "${dir.replace('/', '_')}_$name"
-        return File(stagingDir, "$key.${info.size}.part")
+        val key = CRC32().apply { update(info.name.toByteArray(Charsets.UTF_8)) }.value
+        val name = ReceivedPaths.segments(info.name).last()
+        return File(stagingDir, "$name.${java.lang.Long.toHexString(key)}.${info.size}.part")
+    }
+
+    override fun begin(items: List<ItemInfo>) {
+        val sig = CRC32()
+        items.forEach { sig.update("${it.kind}/${it.size}/${it.name}\n".toByteArray(Charsets.UTF_8)) }
+        val file = File(stagingDir, "roots-${java.lang.Long.toHexString(sig.value)}.txt")
+        rootsFile = file
+        filesLeft = items.count { !it.isText && !it.isDir }
+        try {
+            if (file.exists()) file.readLines().forEach { line ->
+                val kv = line.split('\t')
+                if (kv.size == 2) paths.assign(kv[0], kv[1])
+            }
+        } catch (_: Exception) {}
+        items.mapNotNullTo(LinkedHashSet()) { paths.rootOf(it) }.forEach { paths.rootFor(it) }
+        if (paths.assigned().isNotEmpty()) try {
+            file.writeText(paths.assigned().entries.joinToString("\n") { "${it.key}\t${it.value}" })
+        } catch (_: Exception) {}
+    }
+
+    /** Whether a top-level folder [name] already exists at the destination. */
+    private fun rootExists(name: String): Boolean {
+        if (File(baseDir, name).exists()) return true
+        if (!scoped) return false
+        // Android 10 may hide the public folder from the File API; our own earlier files are still visible here.
+        return try {
+            val prefix = "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER/$name/"
+            val like = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            resolver.query(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? ESCAPE '\\'", arrayOf(like), null,
+            )?.use { it.count > 0 } ?: false
+        } catch (_: Exception) {
+            false
+        }
     }
 
     override fun offset(index: Int, info: ItemInfo): Long {
@@ -187,22 +249,25 @@ class DownloadSink(
 
     override fun finish(index: Int, info: ItemInfo, ok: Boolean) {
         texts.remove(index)?.let { if (ok) onText(it.toString("UTF-8")); return }
-        // TODO(folder step 2): create the folder itself (needed for empty ones under MediaStore).
-        if (info.isDir) return
-        val p = partFile(info)
-        if (!ok) {
-            // Leave the .part file so a subsequent retry can resume!
+        // On failure the .part file stays, so a subsequent retry can resume.
+        if (!ok) return
+        val parts = paths.map(info)
+        if (info.isDir) {
+            makeDir(parts.joinToString("/"))
+            if (parts.size == 1) onFolder(parts[0], location(""))
             return
         }
+        saveFile(info, parts.dropLast(1).joinToString("/"), parts.last())
+        if (--filesLeft == 0) rootsFile?.delete()
+    }
 
-        val (relDir, fileName) = parsePath(info.name)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val relPath = if (relDir.isEmpty()) "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER"
-            else "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER/$relDir"
+    private fun saveFile(info: ItemInfo, relDir: String, fileName: String) {
+        val p = partFile(info)
+        if (scoped) {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, fileName)
                 put(MediaStore.Downloads.MIME_TYPE, info.mime)
-                put(MediaStore.Downloads.RELATIVE_PATH, relPath)
+                put(MediaStore.Downloads.RELATIVE_PATH, relativePath(relDir))
                 put(MediaStore.Downloads.IS_PENDING, 1)
             }
             val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
@@ -213,8 +278,7 @@ class DownloadSink(
                 }
                 resolver.update(uri, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
                 p.delete()
-                val displayLocation = if (relDir.isEmpty()) "Download/$FOLDER" else "Download/$FOLDER/$relDir"
-                onFile(fileName, displayLocation, uri, info.mime)
+                onFile(fileName, location(relDir), uri, info.mime)
             } catch (e: Exception) {
                 try { resolver.delete(uri, null, null) } catch (_: Exception) {}
                 throw e
@@ -222,15 +286,38 @@ class DownloadSink(
             return
         }
 
-        val baseDir = File(app.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: app.filesDir, FOLDER)
-        val targetDir = if (relDir.isEmpty()) baseDir else File(baseDir, relDir).apply { mkdirs() }
+        val targetDir = (if (relDir.isEmpty()) baseDir else File(baseDir, relDir)).apply { mkdirs() }
         val finalFile = unique(targetDir, fileName)
         if (!p.renameTo(finalFile)) {
             p.inputStream().use { inp -> finalFile.outputStream().use { out -> inp.copyTo(out) } }
             p.delete()
         }
-        val uri = Uri.fromFile(finalFile)
-        onFile(finalFile.name, targetDir.absolutePath, uri, info.mime)
+        onFile(finalFile.name, targetDir.absolutePath, Uri.fromFile(finalFile), info.mime)
+    }
+
+    /**
+     * Creates a received folder, also when it stays empty. Android 11+ lets any app create folders
+     * in the public Download directory through the File API, as does every version for the
+     * app-specific directory. Android 10 doesn't: there a placeholder file inserted through
+     * MediaStore makes the provider create the folder, which stays after the placeholder is deleted.
+     */
+    private fun makeDir(relDir: String) {
+        val dir = File(baseDir, relDir)
+        if (dir.isDirectory || dir.mkdirs() || dir.isDirectory) return
+        if (!scoped) throw IOException("cannot create folder $relDir")
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, ".sendanyway-folder")
+            put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+            put(MediaStore.Downloads.RELATIVE_PATH, relativePath(relDir))
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IOException("cannot create folder $relDir")
+        try {
+            resolver.openOutputStream(uri)?.close()
+        } finally {
+            try { resolver.delete(uri, null, null) } catch (_: Exception) {}
+        }
     }
 
     private fun unique(dir: File, name: String): File {
@@ -248,21 +335,6 @@ class DownloadSink(
     companion object {
         const val FOLDER = "SendAnyway"
 
-        fun parsePath(path: String): Pair<String, String> {
-            val normalized = path.replace('\\', '/').trim().trim('/')
-            val parts = normalized.split('/').map { safeSegment(it) }.filter { it.isNotEmpty() && it != "." && it != ".." }
-            return if (parts.size > 1) {
-                val dir = parts.dropLast(1).joinToString("/")
-                val file = parts.last()
-                dir to file
-            } else {
-                "" to (parts.firstOrNull()?.ifEmpty { "file" } ?: "file")
-            }
-        }
-
-        fun safeSegment(name: String): String =
-            name.replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]"), "_").trim().trimStart('.').take(120).ifEmpty { "file" }
-
-        fun safeName(name: String): String = parsePath(name).second
+        fun safeSegment(name: String): String = ReceivedPaths.safeSegment(name)
     }
 }

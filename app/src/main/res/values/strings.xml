@@ -57,6 +57,7 @@
     <string name="nothing_to_send">Nothing to send</string>
 
     <string name="items_summary">%1$d item(s) · %2$s</string>
+    <string name="folder_contents">Folder · %1$d file(s) · %2$s</string>
     <string name="scan_this">Scan this code with Send Anyway on the other device</string>
     <string name="start_wifi_direct">Start Wi-Fi Direct</string>
     <string name="stop_wifi_direct">Stop Wi-Fi Direct</string>

@@ -434,7 +434,7 @@ class ReceiveActivity : Activity() {
                 activeLink = link
                 ui {
                     stopClients()
-                    onConnected(offer.items.size, offer.peerName, link)
+                    onConnected(offer.items.count { !it.isDir }, offer.peerName, link)
                 }
                 val throttle = Throttle()
                 Protocol.receive(ch, offer, sink(), object : TransferListener {
@@ -444,7 +444,7 @@ class ReceiveActivity : Activity() {
                         if (throttle.ready(done == total)) ui { showProgress(done, total) }
                     }
                 }, ackEvery = link.ackEvery)
-                TransferService.end(app, app.getString(R.string.notif_received), app.getString(R.string.notif_received_text, offer.items.size, offer.peerName))
+                TransferService.end(app, app.getString(R.string.notif_received), app.getString(R.string.notif_received_text, offer.items.count { !it.isDir }, offer.peerName))
                 ui { onFinished(null) }
             } catch (e: Exception) {
                 if (mine) {
@@ -557,7 +557,13 @@ class ReceiveActivity : Activity() {
         this,
         onText = { text -> ui { addText(text) } },
         onFile = { name, location, uri, mime -> ui { addFile(name, location, uri, mime) } },
+        onFolder = { name, location -> ui { addFolder(name, location) } },
     )
+
+    private fun addFolder(name: String, location: String) {
+        if (closed) return
+        addResult(resultCard(R.drawable.ic_folder, name, getString(R.string.saved_to, location)))
+    }
 
     private fun addFile(name: String, location: String, uri: Uri?, mime: String) {
         if (closed) return

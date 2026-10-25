@@ -183,6 +183,7 @@ object Protocol {
         listener: TransferListener,
         ackEvery: Long = ACK_EVERY,
     ) {
+        sink.begin(offer.items)
         val offsets = LongArray(offer.items.size) { i -> sink.offset(i, offer.items[i]) }
         if (offsets.any { it > 0 }) {
             ch.send(message(ACCEPT) {

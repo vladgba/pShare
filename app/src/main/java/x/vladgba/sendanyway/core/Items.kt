@@ -62,6 +62,9 @@ class DirItem(path: String) : OutgoingItem {
 
 /** Where received items go. [finish] is always called after [open], with ok=false on failure. */
 interface ReceiveSink {
+    /** Called once with the whole offer before any other call (stream transfers only). */
+    fun begin(items: List<ItemInfo>) {}
+
     /** Existing bytes on disk for this item if resuming an interrupted transfer. */
     fun offset(index: Int, info: ItemInfo): Long = 0L
 
@@ -70,6 +73,57 @@ interface ReceiveSink {
 
     fun open(index: Int, info: ItemInfo): OutputStream
     fun finish(index: Int, info: ItemInfo, ok: Boolean)
+}
+
+/**
+ * Where received paths land. Sender paths are untrusted: [segments] drops empty, "." and ".."
+ * parts and makes each part a safe file name, so nothing can escape the destination folder.
+ *
+ * A received folder tree keeps its hierarchy under one top-level folder ("Album/..."). If that
+ * folder already exists at the destination, the whole tree goes to "Album (1)" instead, so
+ * a transfer never merges into an older one. Single top-level files are left as they are.
+ */
+class ReceivedPaths(private val exists: (root: String) -> Boolean) {
+    private val roots = HashMap<String, String>()
+
+    /** Root folders already chosen, e.g. restored for a resumed transfer: received name to destination name. */
+    fun assigned(): Map<String, String> = roots
+
+    fun assign(root: String, destination: String) { roots[root] = destination }
+
+    /** Safe destination path segments of [info], with the top-level folder renamed if needed. */
+    fun map(info: ItemInfo): List<String> {
+        val parts = segments(info.name)
+        if (!info.isDir && parts.size == 1) return parts
+        return listOf(rootFor(parts[0])) + parts.drop(1)
+    }
+
+    /** Top-level folder [info] belongs to (null for single top-level files). */
+    fun rootOf(info: ItemInfo): String? {
+        val parts = segments(info.name)
+        return if (!info.isDir && parts.size == 1) null else parts[0]
+    }
+
+    fun rootFor(root: String): String = roots.getOrPut(root) {
+        val taken = roots.values.toSet()
+        var name = root
+        var n = 1
+        while (name in taken || exists(name)) name = "$root (${n++})"
+        name
+    }
+
+    companion object {
+        fun segments(path: String): List<String> {
+            val parts = path.replace('\\', '/').split('/')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && it != "." && it != ".." }
+                .map { safeSegment(it) }
+            return parts.ifEmpty { listOf("file") }
+        }
+
+        fun safeSegment(name: String): String =
+            name.replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001f]"), "_").trim().trimStart('.').take(120).ifEmpty { "file" }
+    }
 }
 
 interface TransferListener {

@@ -184,7 +184,7 @@ class SendActivity : Activity() {
         }
         val total = items.map { it.info }.knownTotal()
         findViewById<TextView>(R.id.summary).text =
-            getString(R.string.items_summary, items.size, formatSize(total))
+            getString(R.string.items_summary, items.count { !it.info.isDir }, formatSize(total))
         itemsList.removeAllViews()
         for (i in 0 until items.size) itemsList.addView(itemRow(i, items[i]))
         return true
@@ -212,7 +212,10 @@ class SendActivity : Activity() {
             ellipsize = TextUtils.TruncateAt.MIDDLE
         })
         texts.addView(TextView(this, null, 0, R.style.Text_Caption).apply {
-            text = formatSize(item.info.size)
+            text = if (!item.info.isDir) formatSize(item.info.size) else {
+                val inside = items.filter { !it.info.isDir && it.info.name.startsWith(item.info.name + "/") }
+                getString(R.string.folder_contents, inside.size, formatSize(inside.map { it.info }.knownTotal()))
+            }
         })
         row.addView(texts)
         row.addView(ImageButton(this, null, 0, R.style.IconButton).apply {
@@ -222,7 +225,10 @@ class SendActivity : Activity() {
             imageTintList = ColorStateList.valueOf(getColor(R.color.muted))
             contentDescription = getString(R.string.remove)
             setOnClickListener {
+                // Removing a folder removes everything inside it too.
+                val removed = items[index].info
                 items.removeAt(index)
+                if (removed.isDir) items.removeAll { it.info.name.startsWith(removed.name + "/") }
                 bundle = null
                 slicer = null
                 if (updateSummaryAndList()) refreshPairing()

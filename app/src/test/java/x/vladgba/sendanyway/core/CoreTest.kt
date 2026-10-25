@@ -141,6 +141,31 @@ class CoreTest {
         assertArrayEquals(randomBytes(5_000, 3), received.data[1]!!.toByteArray())
     }
 
+    @Test
+    fun receivedPathsStayInsideAndRenameTakenRoots() {
+        fun dir(n: String) = ItemInfo(ItemInfo.KIND_DIR, n, ItemInfo.MIME_DIR, 0)
+        fun file(n: String) = ItemInfo(ItemInfo.KIND_FILE, n, "", 1)
+        assertEquals(listOf("etc", "passwd"), ReceivedPaths.segments("../../etc/./passwd"))
+        assertEquals(listOf("a", "b"), ReceivedPaths.segments("/a//b\\"))
+        assertEquals(listOf("file"), ReceivedPaths.segments(".."))
+        assertEquals(listOf("hidden"), ReceivedPaths.segments(".hidden"))
+
+        val existing = setOf("Album", "Album (1)")
+        val paths = ReceivedPaths { it in existing }
+        assertEquals(listOf("Album (2)"), paths.map(dir("Album")))
+        assertEquals(listOf("Album (2)", "2024", "photo.jpg"), paths.map(file("Album/2024/photo.jpg")))
+        assertEquals(listOf("Album (2)", "empty"), paths.map(dir("Album/empty")))
+        // Loose top-level files keep their names (the sink de-duplicates them per file).
+        assertEquals(listOf("Album"), paths.map(file("Album")))
+        assertEquals(null, paths.rootOf(file("notes.txt")))
+        assertEquals("Docs", paths.rootFor("Docs"))
+
+        // A resumed transfer restores the earlier choice.
+        val resumed = ReceivedPaths { true }
+        resumed.assign("Album", "Album (2)")
+        assertEquals(listOf("Album (2)", "photo.jpg"), resumed.map(file("Album/photo.jpg")))
+    }
+
     /** Bluetooth-like: SDU-sized frames over a tiny buffer (heavy back-pressure). Must not deadlock. */
     @Test(timeout = 20_000)
     fun smallFramesTinyBufferWithAcks() {
