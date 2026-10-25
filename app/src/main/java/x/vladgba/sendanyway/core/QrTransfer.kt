@@ -35,6 +35,26 @@ object QrBundle {
     }
 
     fun parse(bundle: ByteArray, sink: ReceiveSink): List<ItemInfo> {
+        // Read the manifest first so the sink reserves destination roots just as for a stream
+        // offer. Scan payloads without retaining a second uncompressed copy in memory.
+        val manifest = ArrayList<ItemInfo>()
+        DataInputStream(InflaterInputStream(ByteArrayInputStream(bundle))).use { inp ->
+            repeat(inp.readUnsignedShort()) {
+                val info = ItemInfo.read(inp)
+                if (info.size < 0 || (info.isDir && info.size != 0L)) throw IOException("bad entry ${info.name}")
+                manifest += info
+                var left = info.size
+                while (left > 0) {
+                    val skipped = inp.skip(minOf(left, 32 * 1024L))
+                    if (skipped > 0) left -= skipped
+                    else {
+                        if (inp.read() < 0) throw IOException("bundle truncated")
+                        left--
+                    }
+                }
+            }
+        }
+        sink.begin(manifest)
         val result = ArrayList<ItemInfo>()
         DataInputStream(InflaterInputStream(ByteArrayInputStream(bundle))).use { inp ->
             val count = inp.readUnsignedShort()
@@ -60,6 +80,7 @@ object QrBundle {
                 result += info
             }
         }
+        sink.complete()
         return result
     }
 }

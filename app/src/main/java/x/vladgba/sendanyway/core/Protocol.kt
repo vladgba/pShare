@@ -243,6 +243,7 @@ object Protocol {
             listener.onItemDone(index, info)
         }
         expect(ch.receive(), DONE)
+        sink.complete()
         ch.send(byteArrayOf(DONE.toByte()))
     }
 

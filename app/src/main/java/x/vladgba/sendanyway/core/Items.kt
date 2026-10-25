@@ -62,8 +62,11 @@ class DirItem(path: String) : OutgoingItem {
 
 /** Where received items go. [finish] is always called after [open], with ok=false on failure. */
 interface ReceiveSink {
-    /** Called once with the whole offer before any other call (stream transfers only). */
+    /** Called once with the whole offer before any other call. */
     fun begin(items: List<ItemInfo>) {}
+
+    /** Called after every item has been successfully received. */
+    fun complete() {}
 
     /** Existing bytes on disk for this item if resuming an interrupted transfer. */
     fun offset(index: Int, info: ItemInfo): Long = 0L

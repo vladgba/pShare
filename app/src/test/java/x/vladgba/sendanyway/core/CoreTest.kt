@@ -19,7 +19,18 @@ class CoreTest {
     private class MemorySink : ReceiveSink {
         val data = HashMap<Int, ByteArrayOutputStream>()
         val finished = HashMap<Int, Boolean>()
-        override fun open(index: Int, info: ItemInfo): OutputStream = ByteArrayOutputStream().also { data[index] = it }
+        var manifest: List<ItemInfo>? = null
+        var completed = false
+        override fun begin(items: List<ItemInfo>) { manifest = items }
+        override fun complete() {
+            assertEquals(manifest!!.size, finished.size)
+            assertTrue(finished.values.all { it })
+            completed = true
+        }
+        override fun open(index: Int, info: ItemInfo): OutputStream {
+            assertEquals(info.name, manifest!![index].name)
+            return ByteArrayOutputStream().also { data[index] = it }
+        }
         override fun finish(index: Int, info: ItemInfo, ok: Boolean) { finished[index] = ok }
     }
 
@@ -108,6 +119,10 @@ class CoreTest {
             DirItem("Album/empty"),
             DirItem("Album/2024"),
             BytesItem("Album/2024/photo.jpg", randomBytes(4_000, 4)),
+            BytesItem("Album/2024/zero.bin", ByteArray(0)),
+            DirItem("Album/2024/empty/deep"),
+            BytesItem("loose.bin", byteArrayOf(1, 2, 3)),
+            TextItem("Standalone text Привіт"),
         )
         var senderError: Throwable? = null
         var peerFeatures = -1
@@ -126,19 +141,98 @@ class CoreTest {
         sender.join(5000)
         senderError?.let { throw it }
         assertEquals(Protocol.MY_FEATURES, peerFeatures)
-        assertEquals(listOf("Album", "Album/photo.jpg", "Album/empty", "Album/2024", "Album/2024/photo.jpg"), offer.items.map { it.name })
-        assertEquals(listOf(true, false, true, true, false), offer.items.map { it.isDir })
+        assertEquals(items.map { it.info.name }, offer.items.map { it.name })
+        assertEquals(items.map { it.info.kind }, offer.items.map { it.kind })
+        assertEquals(9_003L + "Standalone text Привіт".toByteArray().size, offer.items.knownTotal())
         assertEquals(0, sink.data[2]!!.size())
         assertArrayEquals(randomBytes(4_000, 4), sink.data[4]!!.toByteArray())
         assertTrue(sink.finished.values.all { it })
+        assertTrue(sink.completed)
 
         // Receivers from before folder support announce no features and get the files only.
-        assertEquals(listOf("Album/photo.jpg", "Album/2024/photo.jpg"), Protocol.itemsFor(items, 0).map { it.info.name })
+        assertEquals(items.filter { !it.info.isDir }, Protocol.itemsFor(items, 0))
 
         val received = MemorySink()
         val infos = QrBundle.parse(QrBundle.build(items), received)
         assertEquals(offer.items.map { it.name to it.kind }, infos.map { it.name to it.kind })
         assertArrayEquals(randomBytes(5_000, 3), received.data[1]!!.toByteArray())
+        items.indices.forEach { assertArrayEquals(sink.data[it]!!.toByteArray(), received.data[it]!!.toByteArray()) }
+        assertTrue(received.completed)
+    }
+
+    @Test
+    fun emptyFolderBundleHasLifecycleAndNoPayload() {
+        val item = object : OutgoingItem {
+            override val info = DirItem("Empty").info
+            override fun open(): java.io.InputStream = error("Folders must not be opened")
+        }
+        val sink = MemorySink()
+        val infos = QrBundle.parse(QrBundle.build(listOf(item)), sink)
+        assertTrue(infos.single().isDir)
+        assertEquals(ItemInfo.MIME_DIR, infos.single().mime)
+        assertEquals(0L, infos.single().size)
+        assertEquals(0, sink.data[0]!!.size())
+        assertTrue(sink.completed)
+    }
+
+    @Test(timeout = 20_000)
+    fun directoryOnlyStreamCompletesWithoutOpeningPayloads() {
+        val (id, key) = Pairing.newSecrets()
+        val (a, b) = pipePair()
+        val items = listOf("Empty", "Empty/deep").map { name -> object : OutgoingItem {
+            override val info = DirItem(name).info
+            override fun open(): java.io.InputStream = error("Folders must not be opened")
+        } }
+        var senderError: Throwable? = null
+        val sender = thread {
+            try {
+                val channel = SecureChannel(key, id, false, a.first, a.second)
+                Protocol.readPeer(channel)
+                Protocol.send(channel, "s", items, object : TransferListener {})
+            } catch (t: Throwable) { senderError = t }
+        }
+        val channel = SecureChannel(key, id, true, b.first, b.second)
+        val offer = Protocol.requestOffer(channel, "r")
+        val sink = MemorySink()
+        Protocol.receive(channel, offer, sink, object : TransferListener {})
+        sender.join(5000)
+        assertTrue("sender did not finish", !sender.isAlive)
+        senderError?.let { throw it }
+        assertTrue(sink.completed)
+        assertEquals(0L, offer.items.knownTotal())
+        assertTrue(sink.data.values.all { it.size() == 0 })
+    }
+
+    @Test
+    fun legacyHelloWithoutFeaturesStillNegotiates() {
+        val (id, key) = Pairing.newSecrets()
+        val (a, b) = pipePair()
+        val frame = ByteArrayOutputStream()
+        java.io.DataOutputStream(frame).use { it.writeByte(Protocol.HELLO); it.writeStr("legacy") }
+        SecureChannel(key, id, true, b.first, b.second).send(frame.toByteArray())
+        val hello = Protocol.readPeer(SecureChannel(key, id, false, a.first, a.second))
+        assertEquals("legacy", hello.name)
+        assertEquals(0, hello.features)
+        assertTrue(!hello.supportsDirs)
+    }
+
+    @Test
+    fun qrRejectsInvalidDirectoryBeforeOpeningSink() {
+        for (size in listOf(-1L, 1L)) {
+            val bytes = ByteArrayOutputStream()
+            java.io.DataOutputStream(java.util.zip.DeflaterOutputStream(bytes)).use {
+                it.writeShort(1)
+                ItemInfo(ItemInfo.KIND_DIR, "bad", ItemInfo.MIME_DIR, size).write(it)
+            }
+            val sink = MemorySink()
+            try {
+                QrBundle.parse(bytes.toByteArray(), sink)
+                fail("Invalid directory size accepted")
+            } catch (_: java.io.IOException) {
+                assertNull(sink.manifest)
+                assertTrue(sink.data.isEmpty())
+            }
+        }
     }
 
     @Test

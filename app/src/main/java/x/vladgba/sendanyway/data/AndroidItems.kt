@@ -151,7 +151,6 @@ class DownloadSink(
 
     /** Remembers the root folders chosen for an unfinished transfer, so a retry resumes into them. */
     private var rootsFile: File? = null
-    private var filesLeft = 0
 
     private val scoped get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
 
@@ -182,7 +181,6 @@ class DownloadSink(
         items.forEach { sig.update("${it.kind}/${it.size}/${it.name}\n".toByteArray(Charsets.UTF_8)) }
         val file = File(stagingDir, "roots-${java.lang.Long.toHexString(sig.value)}.txt")
         rootsFile = file
-        filesLeft = items.count { !it.isText && !it.isDir }
         try {
             if (file.exists()) file.readLines().forEach { line ->
                 val kv = line.split('\t')
@@ -193,6 +191,10 @@ class DownloadSink(
         if (paths.assigned().isNotEmpty()) try {
             file.writeText(paths.assigned().entries.joinToString("\n") { "${it.key}\t${it.value}" })
         } catch (_: Exception) {}
+    }
+
+    override fun complete() {
+        rootsFile?.delete()
     }
 
     /** Whether a top-level folder [name] already exists at the destination. */
@@ -258,7 +260,6 @@ class DownloadSink(
             return
         }
         saveFile(info, parts.dropLast(1).joinToString("/"), parts.last())
-        if (--filesLeft == 0) rootsFile?.delete()
     }
 
     private fun saveFile(info: ItemInfo, relDir: String, fileName: String) {
