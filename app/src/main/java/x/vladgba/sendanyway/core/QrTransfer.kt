@@ -16,6 +16,8 @@ import java.util.zip.InflaterInputStream
  * chunks, and each chunk is shown as a QR code in a looping slideshow. One-way, no pairing needed.
  *
  * Bundle (DEFLATE-compressed): `u16 count`, then per item `ItemInfo` (exact size) + raw bytes.
+ * Folder entries ([ItemInfo.KIND_DIR]) have size 0. QR is one-way, so they can't be negotiated:
+ * receivers older than folder support save them as empty files.
  */
 object QrBundle {
     /** Reads every item fully into memory — QR mode is only practical for small payloads anyway. */
@@ -24,7 +26,7 @@ object QrBundle {
         DataOutputStream(DeflaterOutputStream(bos, Deflater(Deflater.BEST_COMPRESSION))).use { out ->
             out.writeShort(items.size)
             for (item in items) {
-                val data = item.open().use { it.readBytes() }
+                val data = if (item.info.isDir) ByteArray(0) else item.open().use { it.readBytes() }
                 item.info.withSize(data.size.toLong()).write(out)
                 out.write(data)
             }
@@ -39,6 +41,7 @@ object QrBundle {
             val buf = ByteArray(32 * 1024)
             for (i in 0 until count) {
                 val info = ItemInfo.read(inp)
+                if (info.isDir && info.size != 0L) throw IOException("bad folder entry ${info.name}")
                 var ok = false
                 val out = sink.open(i, info)
                 try {

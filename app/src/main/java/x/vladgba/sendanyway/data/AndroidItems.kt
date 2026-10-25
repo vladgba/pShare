@@ -10,6 +10,7 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
+import x.vladgba.sendanyway.core.DirItem
 import x.vladgba.sendanyway.core.ItemInfo
 import x.vladgba.sendanyway.core.OutgoingItem
 import x.vladgba.sendanyway.core.ReceiveSink
@@ -66,41 +67,58 @@ class UriItem(
         opened?.also { opened = null } ?: resolver.openInputStream(uri) ?: throw IOException("cannot open $uri")
 }
 
-/** Recursively traverses document trees picked via ACTION_OPEN_DOCUMENT_TREE. */
+/**
+ * Recursively traverses document trees picked via ACTION_OPEN_DOCUMENT_TREE. The picked folder
+ * itself is the first entry ("Album"), followed depth-first by a [DirItem] for every subfolder
+ * (empty ones too) and a [UriItem] for every file, all named by their path from the picked
+ * folder's parent ("Album/2024/photo.jpg"). Each folder precedes its contents.
+ */
 object TreeWalker {
+    private val PROJECTION = arrayOf(
+        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+        DocumentsContract.Document.COLUMN_MIME_TYPE,
+    )
+
     fun walk(resolver: ContentResolver, treeUri: Uri): List<OutgoingItem> {
         val out = ArrayList<OutgoingItem>()
         val rootDocId = try { DocumentsContract.getTreeDocumentId(treeUri) } catch (_: Exception) { return out }
+        val rootName = DownloadSink.safeSegment(rootName(resolver, treeUri, rootDocId))
         fun traverse(docId: String, currentPath: String) {
             val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
-            val projection = arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-                DocumentsContract.Document.COLUMN_SIZE,
-            )
-            resolver.query(childrenUri, projection, null, null, null)?.use { c ->
+            resolver.query(childrenUri, PROJECTION, null, null, null)?.use { c ->
                 val idIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
                 val nameIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
                 val mimeIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
-                val sizeIdx = c.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
                 while (c.moveToNext()) {
-                    val childId = if (idIdx >= 0) c.getString(idIdx) else continue
-                    val displayName = if (nameIdx >= 0) c.getString(nameIdx) ?: "file" else "file"
+                    val childId = if (idIdx >= 0) c.getString(idIdx) ?: continue else continue
+                    val displayName = DownloadSink.safeSegment(if (nameIdx >= 0) c.getString(nameIdx) ?: "file" else "file")
                     val mime = if (mimeIdx >= 0) c.getString(mimeIdx) ?: "" else ""
-                    val path = if (currentPath.isEmpty()) displayName else "$currentPath/$displayName"
+                    val path = "$currentPath/$displayName"
                     if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                        out.add(DirItem(path))
                         traverse(childId, path)
                     } else {
                         val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
-                        val size = if (sizeIdx >= 0 && !c.isNull(sizeIdx)) c.getLong(sizeIdx) else -1L
                         out.add(UriItem(resolver, docUri, overrideName = path))
                     }
                 }
             }
         }
-        traverse(rootDocId, "")
+        out.add(DirItem(rootName))
+        traverse(rootDocId, rootName)
         return out
+    }
+
+    /** Display name of the picked folder, falling back to the last part of its document id. */
+    private fun rootName(resolver: ContentResolver, treeUri: Uri, rootDocId: String): String {
+        try {
+            val rootUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, rootDocId)
+            resolver.query(rootUri, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) c.getString(0)?.takeIf { it.isNotBlank() }?.let { return it }
+            }
+        } catch (_: Exception) {}
+        return rootDocId.substringAfterLast(':').substringAfterLast('/').ifBlank { "folder" }
     }
 }
 
@@ -133,7 +151,7 @@ class DownloadSink(
     }
 
     override fun offset(index: Int, info: ItemInfo): Long {
-        if (info.isText || info.size <= 0) return 0L
+        if (info.isText || info.isDir || info.size <= 0) return 0L
         val p = partFile(info)
         if (p.exists()) {
             val len = p.length()
@@ -161,6 +179,7 @@ class DownloadSink(
 
     override fun open(index: Int, info: ItemInfo): OutputStream {
         if (info.isText) return ByteArrayOutputStream().also { texts[index] = it }
+        if (info.isDir) return object : OutputStream() { override fun write(b: Int) {} }
         val p = partFile(info)
         val appending = p.exists() && p.length() > 0 && p.length() < info.size
         return FileOutputStream(p, appending)
@@ -168,6 +187,8 @@ class DownloadSink(
 
     override fun finish(index: Int, info: ItemInfo, ok: Boolean) {
         texts.remove(index)?.let { if (ok) onText(it.toString("UTF-8")); return }
+        // TODO(folder step 2): create the folder itself (needed for empty ones under MediaStore).
+        if (info.isDir) return
         val p = partFile(info)
         if (!ok) {
             // Leave the .part file so a subsequent retry can resume!

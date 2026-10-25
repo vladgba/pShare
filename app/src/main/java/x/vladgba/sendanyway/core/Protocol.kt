@@ -13,7 +13,7 @@ import java.util.zip.CRC32
  *
  * ```
  * receiver (connects)                 sender (shows QR, listens)
- *   HELLO  name            ──▶
+ *   HELLO  name [features] ──▶
  *                          ◀──        OFFER  name, items[]
  *   ACCEPT                 ──▶
  *                          ◀──        DATA bytes … ITEM_END   (per item, in order)
@@ -26,6 +26,10 @@ import java.util.zip.CRC32
  * receiver actually has, not bytes sitting in a local socket buffer.
  *
  * Either side may send ERROR(message) instead of the next expected frame.
+ *
+ * HELLO may carry a trailing `u8 features` bitmask (absent from older receivers, which older
+ * senders simply ignore). Folder entries ([ItemInfo.KIND_DIR]) are only offered to receivers that
+ * announce [FEATURE_DIRS]; others get the files alone, still with their "Root/sub/file" paths.
  */
 object Protocol {
     const val HELLO = 1
@@ -37,6 +41,10 @@ object Protocol {
     const val ERROR = 7
     const val ACK = 8
 
+    /** Receiver understands [ItemInfo.KIND_DIR] entries. */
+    const val FEATURE_DIRS = 1
+    const val MY_FEATURES = FEATURE_DIRS
+
     /** Default DATA payload for fast links (TCP). Slow links pass a smaller one. */
     const val DEFAULT_CHUNK = 64 * 1024
     const val ACK_EVERY = 32 * 1024L
@@ -47,16 +55,30 @@ object Protocol {
 
     class Offer(val peerName: String, val items: List<ItemInfo>)
 
+    class Hello(val name: String, val features: Int) {
+        val supportsDirs: Boolean get() = features and FEATURE_DIRS != 0
+    }
+
     class RemoteError(msg: String) : IOException(msg)
 
     // ---- sender side ----------------------------------------------------------------------
 
     /** First frame on a freshly accepted connection. Throws [SecureChannel.AuthException] for strangers. */
-    fun readHello(ch: SecureChannel): String {
+    fun readHello(ch: SecureChannel): String = readPeer(ch).name
+
+    /** Like [readHello], plus the receiver's feature bits (0 for older versions). */
+    fun readPeer(ch: SecureChannel): Hello {
         val m = ch.receive()
         expect(m, HELLO)
-        return body(m).readStr()
+        val inp = body(m)
+        val name = inp.readStr()
+        val features = if (inp.available() > 0) inp.readUnsignedByte() else 0
+        return Hello(name, features)
     }
+
+    /** What a peer with [features] can be offered: folder entries are dropped for older receivers. */
+    fun itemsFor(items: List<OutgoingItem>, features: Int): List<OutgoingItem> =
+        if (features and FEATURE_DIRS != 0) items else items.filter { !it.info.isDir }
 
     fun send(
         ch: SecureChannel,
@@ -100,7 +122,7 @@ object Protocol {
         items.forEachIndexed { index, item ->
             val offset = if (index < offsets.size) offsets[index] else 0L
             val crc = CRC32()
-            item.open().use { inp ->
+            if (!item.info.isDir) item.open().use { inp ->
                 if (offset > 0) {
                     val buf = ByteArray(chunk)
                     var remaining = offset
@@ -145,7 +167,7 @@ object Protocol {
 
     /** Says hello and waits for the offer. A successful return proves the peer knows the key. */
     fun requestOffer(ch: SecureChannel, myName: String): Offer {
-        ch.send(message(HELLO) { writeStr(myName) })
+        ch.send(message(HELLO) { writeStr(myName); writeByte(MY_FEATURES) })
         val m = ch.receive()
         expect(m, OFFER)
         val inp = body(m)
@@ -189,6 +211,7 @@ object Protocol {
                     val m = ch.receive()
                     when (type(m)) {
                         DATA -> {
+                            if (info.isDir) throw IOException("unexpected data for folder ${info.name}")
                             out.write(m, 1, m.size - 1)
                             crc.update(m, 1, m.size - 1)
                             done += m.size - 1

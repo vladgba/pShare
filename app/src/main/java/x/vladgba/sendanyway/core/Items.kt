@@ -7,9 +7,15 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.zip.CRC32
 
-/** Description of one transferred item. [size] is -1 when unknown up front (stream transports only). */
+/**
+ * Description of one transferred item. [size] is -1 when unknown up front (stream transports only).
+ * [name] is a '/'-separated path relative to the transfer root; for a picked folder it starts with
+ * the folder's own name ("Album/photo.jpg"). [KIND_DIR] entries describe a folder (including empty
+ * ones), carry no payload and always precede their contents.
+ */
 class ItemInfo(val kind: Int, val name: String, val mime: String, val size: Long) {
     val isText: Boolean get() = kind == KIND_TEXT
+    val isDir: Boolean get() = kind == KIND_DIR
 
     fun write(out: DataOutputStream) {
         out.writeByte(kind)
@@ -23,6 +29,9 @@ class ItemInfo(val kind: Int, val name: String, val mime: String, val size: Long
     companion object {
         const val KIND_FILE = 0
         const val KIND_TEXT = 1
+        /** Folder entry. Only sent to peers that announced [Protocol.FEATURE_DIRS]. */
+        const val KIND_DIR = 2
+        const val MIME_DIR = "inode/directory"
 
         fun read(inp: DataInputStream) = ItemInfo(
             kind = inp.readUnsignedByte(),
@@ -43,6 +52,12 @@ class TextItem(text: String) : OutgoingItem {
     private val bytes = text.toByteArray(Charsets.UTF_8)
     override val info = ItemInfo(ItemInfo.KIND_TEXT, "text.txt", "text/plain", bytes.size.toLong())
     override fun open(): InputStream = ByteArrayInputStream(bytes)
+}
+
+/** A folder entry; [path] is relative to the transfer root, e.g. "Album" or "Album/2024". */
+class DirItem(path: String) : OutgoingItem {
+    override val info = ItemInfo(ItemInfo.KIND_DIR, path, ItemInfo.MIME_DIR, 0L)
+    override fun open(): InputStream = ByteArrayInputStream(ByteArray(0))
 }
 
 /** Where received items go. [finish] is always called after [open], with ok=false on failure. */

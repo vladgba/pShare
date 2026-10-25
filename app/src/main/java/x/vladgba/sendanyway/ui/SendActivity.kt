@@ -197,7 +197,11 @@ class SendActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(12) }
         }
-        row.addView(iconBadge(if (item is TextItem) R.drawable.ic_text else R.drawable.ic_file))
+        row.addView(iconBadge(when {
+            item is TextItem -> R.drawable.ic_text
+            item.info.isDir -> R.drawable.ic_folder
+            else -> R.drawable.ic_file
+        }))
         val texts = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginStart = dp(14) }
@@ -447,7 +451,8 @@ class SendActivity : Activity() {
             var mine = false
             try {
                 val ch = SecureChannel(key!!, sessionId!!, initiator = false, input = link.input, output = link.output)
-                val peer = Protocol.readHello(ch)
+                val hello = Protocol.readPeer(ch)
+                val peer = hello.name
                 if (closed || !claimed.compareAndSet(false, true)) return@thread
                 mine = true
                 activeLink = link
@@ -456,7 +461,7 @@ class SendActivity : Activity() {
                 items.forEach { (it as? UriItem)?.preopen() }
                 ui { onConnected(peer, link) }
                 val throttle = Throttle()
-                Protocol.send(ch, myName, items, object : TransferListener {
+                Protocol.send(ch, myName, Protocol.itemsFor(items, hello.features), object : TransferListener {
                     override fun onProgress(done: Long, total: Long) {
                         meter.update(done)
                         TransferService.progress(app, done, total, app.getString(R.string.sending_progress, formatSize(done), formatSize(total), meter.speed()))

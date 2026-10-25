@@ -98,6 +98,49 @@ class CoreTest {
         assertEquals(300_000L + 70_000 + "Hello, світ!".toByteArray().size, lastProgress)
     }
 
+    @Test(timeout = 20_000)
+    fun folderTreeKeepsRootAndEmptyFolders() {
+        val (id, key) = Pairing.newSecrets()
+        val (a, b) = pipePair()
+        val items = listOf(
+            DirItem("Album"),
+            BytesItem("Album/photo.jpg", randomBytes(5_000, 3)),
+            DirItem("Album/empty"),
+            DirItem("Album/2024"),
+            BytesItem("Album/2024/photo.jpg", randomBytes(4_000, 4)),
+        )
+        var senderError: Throwable? = null
+        var peerFeatures = -1
+        val sender = thread {
+            try {
+                val ch = SecureChannel(key, id, initiator = false, input = a.first, output = a.second)
+                val hello = Protocol.readPeer(ch)
+                peerFeatures = hello.features
+                Protocol.send(ch, "s", Protocol.itemsFor(items, hello.features), object : TransferListener {})
+            } catch (t: Throwable) { senderError = t }
+        }
+        val ch = SecureChannel(key, id, initiator = true, input = b.first, output = b.second)
+        val offer = Protocol.requestOffer(ch, "r")
+        val sink = MemorySink()
+        Protocol.receive(ch, offer, sink, object : TransferListener {})
+        sender.join(5000)
+        senderError?.let { throw it }
+        assertEquals(Protocol.MY_FEATURES, peerFeatures)
+        assertEquals(listOf("Album", "Album/photo.jpg", "Album/empty", "Album/2024", "Album/2024/photo.jpg"), offer.items.map { it.name })
+        assertEquals(listOf(true, false, true, true, false), offer.items.map { it.isDir })
+        assertEquals(0, sink.data[2]!!.size())
+        assertArrayEquals(randomBytes(4_000, 4), sink.data[4]!!.toByteArray())
+        assertTrue(sink.finished.values.all { it })
+
+        // Receivers from before folder support announce no features and get the files only.
+        assertEquals(listOf("Album/photo.jpg", "Album/2024/photo.jpg"), Protocol.itemsFor(items, 0).map { it.info.name })
+
+        val received = MemorySink()
+        val infos = QrBundle.parse(QrBundle.build(items), received)
+        assertEquals(offer.items.map { it.name to it.kind }, infos.map { it.name to it.kind })
+        assertArrayEquals(randomBytes(5_000, 3), received.data[1]!!.toByteArray())
+    }
+
     /** Bluetooth-like: SDU-sized frames over a tiny buffer (heavy back-pressure). Must not deadlock. */
     @Test(timeout = 20_000)
     fun smallFramesTinyBufferWithAcks() {
