@@ -101,10 +101,45 @@ receiver                         sender
 Open the folder in Android Studio, or:
 
 ```
-./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleDebug          # app/build/outputs/apk/debug/SendAnyway-<version>-debug.apk
 ./gradlew testDebugUnitTest      # protocol, crypto, QR round-trip, reliable-UDP tests
 P2P_IT=1 ./gradlew testDebugUnitTest   # + real STUN / rendezvous / hole-punch test (needs internet)
 ```
+
+Debug builds use application ID `x.vladgba.sendanyway.debug`, so they can be installed alongside
+a release signed with another key without replacing it or removing its data.
+
+### Folder transfer regression checks on devices
+
+Build with JDK 17 (`JAVA_HOME=C:\Users\User\.jdks\ms-17.0.20.1` on the development machine):
+
+```powershell
+.\gradlew.bat testDebugUnitTest assembleDebug assembleDebugAndroidTest
+adb -s <serial> install -r app/build/outputs/apk/debug/SendAnyway-<version>-debug.apk
+adb -s <serial> install -r app/build/outputs/apk/androidTest/debug/SendAnyway-<version>-debug-androidTest.apk
+adb -s <serial> shell am instrument -w x.vladgba.sendanyway.debug.test/x.vladgba.sendanyway.FolderTransferInstrumentation
+```
+
+The dependency-free test runner prints `PASS` or `FAIL` with a stack trace. It checks SAF tree
+enumeration against a test provider, QR receipt (including repeated folder names and empty-only
+transfers), and an encrypted loopback TCP transfer into the real `DownloadSink`. It verifies
+actual directories, distinct contents for equal leaf names in different folders, and zero-byte
+files. Results remain under `Download/SendAnyway/FolderRegression-*` for inspection (app-specific
+Downloads on Android 7–9). The fixture provider and runner are only in the test APK.
+
+For a real transfer between two phones, start the receiver command first, then the sender command
+in another terminal within 45 seconds. Use the same new root name for both commands; swap devices
+to verify the other direction. The receiver listens on TCP port 45879 and checks the saved tree.
+
+```powershell
+adb -s <receiver-serial> shell am instrument -w -e mode receive -e root FolderRegression-device-test x.vladgba.sendanyway.debug.test/x.vladgba.sendanyway.FolderTransferInstrumentation
+adb -s <sender-serial> shell am instrument -w -e mode send -e root FolderRegression-device-test -e peer <receiver-wifi-ip> x.vladgba.sendanyway.debug.test/x.vladgba.sendanyway.FolderTransferInstrumentation
+```
+
+Verified on 2026-10-25 with a Moto G31 (Android 12/API 31) and PLU110 (Android 16/API 36),
+including Wi-Fi transfers in both directions. Android 10's MediaStore placeholder fallback and
+Android 7–9's app-specific storage path have not been verified on a device. These tests exercise
+the transfer protocol and storage; they do not automate camera pairing or the system folder picker.
 
 ## Status / next steps
 

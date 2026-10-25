@@ -16,9 +16,14 @@ android {
         applicationId = "x.vladgba.sendanyway"
         minSdk = 24
         targetSdk = 35
+        testInstrumentationRunner = "x.vladgba.sendanyway.FolderTransferInstrumentation"
     }
 
     buildTypes {
+        debug {
+            // Keep device verification separate from an installed release and its data.
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
