@@ -1,153 +1,41 @@
 # pShare
 
-Send files and text between two Android phones by whatever channel works:
-**Wi-Fi/LAN → Internet P2P → Bluetooth → QR slideshow.** Pairing is always a QR code.
+Send files, folders and text between two Android phones by whatever channel works: **Wi-Fi, Wi-Fi Direct, the internet, Bluetooth, or a QR slideshow** when nothing else does. Pairing is always one QR code, and every transfer is end-to-end encrypted.
 
-- Kotlin, Android framework APIs only (no AndroidX, no Compose, no CameraX, no coroutines)
-- One runtime library: [`com.google.zxing:core`](https://github.com/zxing/zxing) for QR encode/decode
-- minSdk 24 (Android 7.0), targetSdk 35. Every transport works on all supported versions.
-- Release APK is ~100 KB
+## Features
 
-## How it works
+- **One QR, every channel.** The sender shows a QR code; the receiver scans it and tries all channels at once. The first one that connects wins.
+- **Works without a network.** Wi-Fi Direct and Bluetooth need no router; the QR slideshow needs nothing but the camera.
+- **Files, folders and text**, with real progress on both phones.
+- **Share into pShare** from any app, or use the **Send files** Quick Settings tile.
+- **Encrypted.** Every transfer over a network or Bluetooth uses AES-256-GCM with a fresh key from the QR code.
+- **No ads, no accounts, no data collection.**
 
-1. **Sender** picks files / text (or shares into the app) and shows a **pairing QR code**.
-   It starts listening for connections on every available channel at the same time.
-2. **Receiver** scans it. It now knows the session key and how to reach the sender, and tries
-   every channel in parallel. The first connection that proves it knows the key wins.
-3. If nothing connects, the sender taps **"Send as QR slideshow"**. The receiver's camera is still
-   running and picks up the frames automatically. No network, no radio, no permissions besides camera.
+## Permissions
 
-| Channel | How the receiver finds the sender | Data path |
+| Permission | Why | Required |
 |---|---|---|
-| Wi-Fi / LAN | IPv4 addresses + port inside the pairing QR | TCP |
-| Wi-Fi Direct | Sender taps **Start Wi-Fi Direct** and owns a P2P group (Android 10+: app-chosen name/password, pinned to 2.4 GHz); name + password go into the QR. Receiver (Android 10+) joins with `WifiP2pManager.connect(WifiP2pConfig(networkName, passphrase))`, no dialog. Fallback on any version: join `DIRECT-…` in Wi-Fi settings, a network watcher connects | TCP to group owner 192.168.49.1 |
-| Internet P2P | Both phones register with a rendezvous script (`hole-punch.php`) under a room = SHA-256 of the session key, learn their public UDP endpoint by STUN, and punch through their NATs. Offered when the phone has an internet-capable network; not possible behind symmetric NATs | Reliable UDP stream (selective-repeat ARQ, SACK, AIMD) |
-| Bluetooth (RFCOMM) | Sender asks to become discoverable (system prompt) and listens on a per-session RFCOMM UUID; receiver runs classic discovery and tries phones strongest-signal first (then previously paired ones) | Insecure RFCOMM |
-| QR slideshow | — (frames are self-describing) | Camera, one-way |
+| Camera | Scanning the pairing QR and the QR slideshow | Yes, on the receiving phone |
+| Internet, network and Wi-Fi state / change | Wi-Fi, LAN, Wi-Fi Direct and internet transfers | Yes |
+| Nearby Wi-Fi devices | Wi-Fi Direct on Android 13+ | Optional |
+| Nearby devices / Bluetooth / location | Finding the other phone over Bluetooth (Android asks for location before Android 12) | Optional |
+| Notifications, foreground service, wake lock | Keeping a transfer running with the screen off | Optional |
+| Ignore battery optimizations | Long transfers on aggressive battery savers | Optional |
+| Vibrate | Feedback when a code is scanned | Optional |
+| Honeywell decode | Uses the built-in scan engine on Honeywell devices; ignored elsewhere | No |
 
-Scanner: continuous AF finds the code, then focus is **locked** as soon as a code decodes (no lens "breathing"
-between frames); it unlocks after 2.5 s without a decode or on tap. Optical stabilisation is enabled when available,
-and AE runs at a fixed ~30 fps to keep exposures short.
+### Notes
 
-When the code includes a Wi-Fi Direct group: shared LAN and Wi-Fi Direct start together; Bluetooth only if Wi-Fi Direct fails.
-
-Flow control: the receiver ACKs every 32 KB and the sender keeps ≤ 256 KB in flight, so progress on both sides is real.
-A transfer with no progress for 20 s is aborted with a clear message.
-
-Apps can't read their own Bluetooth MAC address (since Android 6), so the receiver finds the sender by
-classic discovery: the sender asks to become visible, listens on a per-session RFCOMM UUID, and only it
-accepts that UUID, so other phones are rejected quickly. Insecure RFCOMM avoids the pairing dialog on most phones.
-
-## Quick Settings shortcut
-
-Edit your phone's Quick Settings panel and add **Send files** (pShare).
-Tap the tile to choose one or more files and open the normal sending screen.
-If the phone is locked, unlock it first when prompted. Canceling the picker returns to the app.
-
-## Security
-
-The pairing QR carries a random 32-byte key. Every frame on LAN/Bluetooth is AES-256-GCM encrypted.
-The IV is an implicit direction+counter (never reused, no replay or reorder within a connection) and the
-session id is bound in as AAD. A peer without the key fails on the first frame, and that is how both
-sides authenticate each other. The QR slideshow is not encrypted: it's line-of-sight only.
-
-## Project layout
-
-```
-app/src/main/java/x/vladgba/share/
-├── core/            pure Kotlin, no Android imports, unit-tested
-│   ├── Wire.kt          QR magic/type bytes, string helpers
-│   ├── Pairing.kt       pairing QR payload (binary)
-│   ├── SecureChannel.kt AES-GCM framed stream
-│   ├── Protocol.kt      HELLO / OFFER / ACCEPT / DATA / ITEM_END / DONE
-│   ├── Items.kt         ItemInfo, OutgoingItem, ReceiveSink
-│   └── QrTransfer.kt    QrBundle (deflate), QrSlicer, QrAssembler
-├── transport/       Lan.kt (TCP), Classic.kt (Bluetooth RFCOMM), Bluetooth.kt (permissions), WifiDirect.kt (P2P group + manual-join watcher),
-│                    P2p.kt (STUN + rendezvous + hole punching), UdpStream.kt (reliable stream over UDP)
-├── qr/              QrRender (ZXing → Bitmap), QrScanner (camera2 → ZXing)
-├── data/            UriItem (content:// input), DownloadSink (→ Download/SendAnyway)
-└── ui/              MainActivity, SendActivity, ReceiveActivity
-```
-
-## Wire formats
-
-**Pairing QR** — `A5 01 ver | sessionId[8] | key[32] | flags | name | port u16 | n | (len, addr)… | [groupName, passphrase]`
-(flags: bit0 Bluetooth RFCOMM, bit1 Wi-Fi Direct group, bit2 internet P2P)
-
-**P2P datagrams** (one UDP socket per side, also used for STUN) — `53 41 type | …`:
-`PUNCH`/`PUNCH_ACK` `id[16] | HMAC-SHA256(key, "SendAnyway/p2p-punch" ‖ id)[16]` (unauthenticated sources are ignored);
-`DATA`/`FIN` `seq u32 | payload ≤ 1180`; `ACK` `next u32 | SACK u64`; `KEEPALIVE` every 4 s. The stream carries the same
-`SecureChannel` frames as TCP, so the content stays AES-GCM encrypted end to end; the rendezvous server only sees the room hash and endpoints.
-
-**Slideshow frame** — `A5 02 | crc32 u32 | bundleLen u32 | chunkSize u16 | seq u32 | bytes…`
-`seq < K` is source chunk `seq`; `seq ≥ K` is a repair chunk: XOR of 2–32 source chunks picked from (seq, crc) by a shared PRNG. After one full pass the sender alternates source and repair frames; the receiver rebuilds missing chunks by peeling (any repair with one unknown chunk reveals it). Every frame is decoded in memory before display and re-encoded with another QR mask if ZXing can't read it.
-The bundle is DEFLATE-compressed: `count u16`, then for each item `ItemInfo` + raw bytes.
-
-**Stream protocol** (inside `SecureChannel` frames):
-
-```
-receiver                         sender
-  HELLO name          ──▶
-                      ◀──        OFFER name, items[]
-  ACCEPT              ──▶
-                      ◀──        DATA… ITEM_END   (per item)
-  ACK bytes           ──▶        (every 32 KB)
-                      ◀──        DONE
-  DONE (ack)          ──▶
-```
+- Received files are saved to **Download/pShare**.
+- The QR slideshow is not encrypted: it is line-of-sight only.
+- How each channel finds the other phone, and the security design, are described in the [guide](docs/GUIDE.md).
 
 ## Build
 
-Open the folder in Android Studio, or:
+Requires Android 7.0+ (API 24). Built with Kotlin on the Android framework; the only library is [ZXing](https://github.com/zxing/zxing) core for QR codes.
 
-```
-./gradlew assembleDebug          # app/build/outputs/apk/debug/SendAnyway-<version>-debug.apk
-./gradlew testDebugUnitTest      # protocol, crypto, QR round-trip, reliable-UDP tests
-P2P_IT=1 ./gradlew testDebugUnitTest   # + real STUN / rendezvous / hole-punch test (needs internet)
+```bash
+./gradlew assembleRelease
 ```
 
-Debug builds use application ID `x.vladgba.share.debug`, so they can be installed alongside
-a release signed with another key without replacing it or removing its data.
-
-### Folder transfer regression checks on devices
-
-Build with JDK 17 (`JAVA_HOME=C:\Users\User\.jdks\ms-17.0.20.1` on the development machine):
-
-```powershell
-.\gradlew.bat testDebugUnitTest assembleDebug assembleDebugAndroidTest
-adb -s <serial> install -r app/build/outputs/apk/debug/SendAnyway-<version>-debug.apk
-adb -s <serial> install -r app/build/outputs/apk/androidTest/debug/SendAnyway-<version>-debug-androidTest.apk
-adb -s <serial> shell am instrument -w x.vladgba.share.debug.test/x.vladgba.share.FolderTransferInstrumentation
-```
-
-The dependency-free test runner prints `PASS` or `FAIL` with a stack trace. It checks SAF tree
-enumeration against a test provider, QR receipt (including repeated folder names and empty-only
-transfers), and an encrypted loopback TCP transfer into the real `DownloadSink`. It verifies
-actual directories, distinct contents for equal leaf names in different folders, and zero-byte
-files. Results remain under `Download/SendAnyway/FolderRegression-*` for inspection (app-specific
-Downloads on Android 7–9). The fixture provider and runner are only in the test APK.
-
-For a real transfer between two phones, start the receiver command first, then the sender command
-in another terminal within 45 seconds. Use the same new root name for both commands; swap devices
-to verify the other direction. The receiver listens on TCP port 45879 and checks the saved tree.
-
-```powershell
-adb -s <receiver-serial> shell am instrument -w -e mode receive -e root FolderRegression-device-test x.vladgba.share.debug.test/x.vladgba.share.FolderTransferInstrumentation
-adb -s <sender-serial> shell am instrument -w -e mode send -e root FolderRegression-device-test -e peer <receiver-wifi-ip> x.vladgba.share.debug.test/x.vladgba.share.FolderTransferInstrumentation
-```
-
-Verified on 2026-10-25 with a Moto G31 (Android 12/API 31) and PLU110 (Android 16/API 36),
-including Wi-Fi transfers in both directions. Android 10's MediaStore placeholder fallback and
-Android 7–9's app-specific storage path have not been verified on a device. These tests exercise
-the transfer protocol and storage; they do not automate camera pairing or the system folder picker.
-
-## Status / next steps
-
-- [x] Core protocol, encryption, QR slideshow codec (unit-tested)
-- [x] LAN/Wi-Fi transport, camera2 scanner, send/receive screens, share-sheet target
-- [x] Wi-Fi Direct group on the sender (2.4 GHz, app-chosen credentials) + in-app join on the receiver; replaced LocalOnlyHotspot, whose scan-based join dialog often found nothing
-- [x] ACK flow control, stall watchdog, speed readout
-- [x] Camera focus lock / OIS / fixed AE fps for steadier scanning
-- [x] Fountain-coded slideshow (systematic XOR repair frames + peeling decoder), chunk map on the receiver, QR mask self-check
-- [x] Bluetooth via RFCOMM
-- [ ] Foreground service so large transfers survive leaving the screen
+The APK is written to `app/build/outputs/apk/release/`.
