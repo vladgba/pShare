@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- pUI: light system bars in light mode only. Managed by configs/android/pui. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedResources">
+    <bool name="p_light_bars">true</bool>
+</resources>

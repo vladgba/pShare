@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- pUI spacing, shape and type scale. Managed by configs/android/pui. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedResources">
+    <!-- spacing (4dp grid) -->
+    <dimen name="p_space_xs">4dp</dimen>
+    <dimen name="p_space_s">8dp</dimen>
+    <dimen name="p_space_m">12dp</dimen>
+    <dimen name="p_space_l">16dp</dimen>
+    <dimen name="p_space_xl">24dp</dimen>
+    <dimen name="p_screen_pad">16dp</dimen>       <!-- horizontal screen gutter -->
+
+    <!-- shape -->
+    <dimen name="p_radius_s">8dp</dimen>          <!-- inputs, small chips -->
+    <dimen name="p_radius_m">14dp</dimen>         <!-- list rows, keys -->
+    <dimen name="p_radius_l">20dp</dimen>         <!-- cards, sheets, dialogs -->
+    <dimen name="p_radius_pill">999dp</dimen>     <!-- buttons, tabs, chips -->
+
+    <!-- sizes -->
+    <dimen name="p_touch">48dp</dimen>
+    <dimen name="p_button_height">44dp</dimen>
+    <dimen name="p_topbar_height">56dp</dimen>
+    <dimen name="p_line_width">1dp</dimen>
+
+    <!-- type scale -->
+    <dimen name="p_text_display">34sp</dimen>
+    <dimen name="p_text_title">22sp</dimen>
+    <dimen name="p_text_subtitle">17sp</dimen>
+    <dimen name="p_text_body">15sp</dimen>
+    <dimen name="p_text_label">14sp</dimen>
+    <dimen name="p_text_caption">12sp</dimen>
+</resources>

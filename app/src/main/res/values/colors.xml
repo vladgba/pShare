@@ -1,31 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Brand -->
-    <color name="accent">#2E6BE6</color>
-    <color name="on_accent">#FFFFFF</color>
-    <color name="accent_container">#DDE7FF</color>
-    <color name="on_accent_container">#0C2A6B</color>
+    <!-- pShare roles, aliased to the shared pUI tokens (light/dark handled by the tokens). -->
+    <color name="accent">@color/p_accent</color>
+    <color name="on_accent">@color/p_on_accent</color>
+    <color name="accent_container">@color/p_accent_soft</color>
+    <color name="on_accent_container">@color/p_on_accent_soft</color>
 
-    <color name="hero_end">#5B4BE0</color>
+    <!-- hero gradient: violet -> graphite-violet, same family as the icon suite -->
+    <color name="hero_end">#FF5B21B6</color>
 
-    <!-- Surfaces -->
-    <color name="bg">#F5F7FB</color>
-    <color name="surface">#FFFFFF</color>
-    <color name="card">#EDF1F7</color>
-    <color name="outline">#D9DEE7</color>
-    <color name="scrim">#99000000</color>
+    <color name="bg">@color/p_bg</color>
+    <color name="surface">@color/p_surface</color>
+    <color name="card">@color/p_surface2</color>
+    <color name="outline">@color/p_line</color>
+    <color name="scrim">@color/p_scrim</color>
 
-    <!-- Text -->
-    <color name="fg">#151A22</color>
-    <color name="muted">#5C6677</color>
+    <color name="fg">@color/p_text</color>
+    <color name="muted">@color/p_text2</color>
 
-    <!-- Status -->
-    <color name="success">#1E9A55</color>
-    <color name="success_container">#DCF4E5</color>
-    <color name="error">#C9362B</color>
-    <color name="error_container">#FCE4E1</color>
-    <color name="warning">#B26A00</color>
-    <color name="warning_container">#FFEFD5</color>
+    <color name="success">@color/p_success</color>
+    <color name="success_container">#2E1E8E5A</color>
+    <color name="error">@color/p_danger</color>
+    <color name="error_container">@color/p_danger_soft</color>
+    <color name="warning">@color/p_warning</color>
+    <color name="warning_container">#2EB26A00</color>
 
     <!-- Always-white QR background, in both themes -->
     <color name="qr_bg">#FFFFFF</color>

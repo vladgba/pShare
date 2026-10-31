@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- pUI color tokens, LIGHT palette. Managed by configs/android/pui: do not edit in an app, re-apply instead.
+     Apps alias their own color names to these tokens (e.g. <color name="card">@color/p_surface</color>)
+     so one palette drives the whole suite. Dark values live in values-night/p_colors.xml. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedResources">
+    <!-- surfaces -->
+    <color name="p_bg">#FFF6F6F8</color>             <!-- window background -->
+    <color name="p_surface">#FFFFFFFF</color>        <!-- cards, sheets, dialogs -->
+    <color name="p_surface2">#FFECECF1</color>       <!-- keys, inputs, neutral tonal fills -->
+    <color name="p_surface3">#FFE0E0E7</color>       <!-- pressed / secondary keys -->
+    <color name="p_line">#FFE2E2E8</color>           <!-- dividers, outlines -->
+
+    <!-- text -->
+    <color name="p_text">#FF16181D</color>
+    <color name="p_text2">#FF5F6370</color>          <!-- secondary text -->
+    <color name="p_text3">#FF9A9DA8</color>          <!-- hints, disabled, faint glyphs -->
+
+    <!-- brand accent (icon suite violet) -->
+    <color name="p_accent">#FF7C3AED</color>         <!-- filled buttons, active states -->
+    <color name="p_on_accent">#FFFFFFFF</color>
+    <color name="p_accent_text">#FF6D28D9</color>    <!-- accent-colored text and icons on p_bg/p_surface -->
+    <color name="p_accent_soft">#FFEFE8FF</color>    <!-- tonal containers, selected rows, active tabs -->
+    <color name="p_on_accent_soft">#FF4C1D95</color>
+
+    <!-- status -->
+    <color name="p_danger">#FFC62828</color>
+    <color name="p_danger_soft">#FFFDE7E7</color>
+    <color name="p_success">#FF1E8E5A</color>
+    <color name="p_warning">#FFB26A00</color>
+
+    <!-- effects -->
+    <color name="p_ripple">#1F16181D</color>
+    <color name="p_scrim">#66000000</color>
+
+    <!-- brand constants (same in both modes): icon background and accent -->
+    <color name="p_brand_graphite">#FF1F232B</color>
+    <color name="p_brand_graphite_deep">#FF121418</color>
+    <color name="p_brand_violet">#FF8B5CF6</color>
+</resources>

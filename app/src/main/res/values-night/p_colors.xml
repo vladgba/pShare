@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- pUI color tokens, DARK (graphite) palette. Managed by configs/android/pui. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedResources">
+    <color name="p_bg">#FF121418</color>
+    <color name="p_surface">#FF1C1F26</color>
+    <color name="p_surface2">#FF262A33</color>
+    <color name="p_surface3">#FF30353F</color>
+    <color name="p_line">#FF2E333D</color>
+
+    <color name="p_text">#FFECEDF1</color>
+    <color name="p_text2">#FFA3A7B3</color>
+    <color name="p_text3">#FF6B707C</color>
+
+    <color name="p_accent">#FF8B5CF6</color>
+    <color name="p_on_accent">#FFFFFFFF</color>
+    <color name="p_accent_text">#FFB197FC</color>
+    <color name="p_accent_soft">#FF2D2547</color>
+    <color name="p_on_accent_soft">#FFDDD0FF</color>
+
+    <color name="p_danger">#FFFF8A80</color>
+    <color name="p_danger_soft">#FF3A2226</color>
+    <color name="p_success">#FF5CD39B</color>
+    <color name="p_warning">#FFFFC266</color>
+
+    <color name="p_ripple">#24FFFFFF</color>
+    <color name="p_scrim">#99000000</color>
+</resources>

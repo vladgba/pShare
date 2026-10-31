@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- pUI framework parents, DARK. Managed by configs/android/pui. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedResources">
+    <style name="Theme.P.Base" parent="android:Theme.Material.NoActionBar" />
+    <style name="Theme.P.Bar.Base" parent="android:Theme.Material" />
+    <style name="Theme.P.Dialog.Base" parent="android:Theme.Material.Dialog.Alert" />
+</resources>

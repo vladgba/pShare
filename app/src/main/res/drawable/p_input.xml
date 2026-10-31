@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- pUI text field: neutral fill, accent outline when focused. Managed by configs/android/pui. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedResources">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/p_surface2" />
+            <stroke android:width="2dp" android:color="@color/p_accent" />
+            <corners android:radius="@dimen/p_radius_s" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/p_surface2" />
+            <corners android:radius="@dimen/p_radius_s" />
+        </shape>
+    </item>
+</selector>
