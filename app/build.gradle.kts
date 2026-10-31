@@ -9,14 +9,14 @@ plugins {
 apply(from = rootProject.file("gradle/android-common.gradle"))
 
 android {
-    namespace = "x.vladgba.sendanyway"
+    namespace = "x.vladgba.share"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "x.vladgba.sendanyway"
+        applicationId = "x.vladgba.share"
         minSdk = 24
         targetSdk = 35
-        testInstrumentationRunner = "x.vladgba.sendanyway.FolderTransferInstrumentation"
+        testInstrumentationRunner = "x.vladgba.share.FolderTransferInstrumentation"
     }
 
     buildTypes {

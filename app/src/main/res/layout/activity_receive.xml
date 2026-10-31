@@ -170,7 +170,7 @@
                     android:layout_marginTop="16dp"
                     android:visibility="gone" />
 
-                <x.vladgba.sendanyway.ui.QrMapView
+                <x.vladgba.share.ui.QrMapView
                     android:id="@+id/qrMap"
                     android:layout_width="match_parent"
                     android:layout_height="96dp"

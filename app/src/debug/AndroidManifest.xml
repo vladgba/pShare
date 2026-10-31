@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <queries>
-        <provider android:authorities="x.vladgba.sendanyway.test.folders" />
+        <provider android:authorities="x.vladgba.share.test.folders" />
     </queries>
 </manifest>

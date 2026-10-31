@@ -54,7 +54,7 @@ sides authenticate each other. The QR slideshow is not encrypted: it's line-of-s
 ## Project layout
 
 ```
-app/src/main/java/x/vladgba/sendanyway/
+app/src/main/java/x/vladgba/share/
 ├── core/            pure Kotlin, no Android imports, unit-tested
 │   ├── Wire.kt          QR magic/type bytes, string helpers
 │   ├── Pairing.kt       pairing QR payload (binary)
@@ -106,7 +106,7 @@ Open the folder in Android Studio, or:
 P2P_IT=1 ./gradlew testDebugUnitTest   # + real STUN / rendezvous / hole-punch test (needs internet)
 ```
 
-Debug builds use application ID `x.vladgba.sendanyway.debug`, so they can be installed alongside
+Debug builds use application ID `x.vladgba.share.debug`, so they can be installed alongside
 a release signed with another key without replacing it or removing its data.
 
 ### Folder transfer regression checks on devices
@@ -117,7 +117,7 @@ Build with JDK 17 (`JAVA_HOME=C:\Users\User\.jdks\ms-17.0.20.1` on the developme
 .\gradlew.bat testDebugUnitTest assembleDebug assembleDebugAndroidTest
 adb -s <serial> install -r app/build/outputs/apk/debug/SendAnyway-<version>-debug.apk
 adb -s <serial> install -r app/build/outputs/apk/androidTest/debug/SendAnyway-<version>-debug-androidTest.apk
-adb -s <serial> shell am instrument -w x.vladgba.sendanyway.debug.test/x.vladgba.sendanyway.FolderTransferInstrumentation
+adb -s <serial> shell am instrument -w x.vladgba.share.debug.test/x.vladgba.share.FolderTransferInstrumentation
 ```
 
 The dependency-free test runner prints `PASS` or `FAIL` with a stack trace. It checks SAF tree
@@ -132,8 +132,8 @@ in another terminal within 45 seconds. Use the same new root name for both comma
 to verify the other direction. The receiver listens on TCP port 45879 and checks the saved tree.
 
 ```powershell
-adb -s <receiver-serial> shell am instrument -w -e mode receive -e root FolderRegression-device-test x.vladgba.sendanyway.debug.test/x.vladgba.sendanyway.FolderTransferInstrumentation
-adb -s <sender-serial> shell am instrument -w -e mode send -e root FolderRegression-device-test -e peer <receiver-wifi-ip> x.vladgba.sendanyway.debug.test/x.vladgba.sendanyway.FolderTransferInstrumentation
+adb -s <receiver-serial> shell am instrument -w -e mode receive -e root FolderRegression-device-test x.vladgba.share.debug.test/x.vladgba.share.FolderTransferInstrumentation
+adb -s <sender-serial> shell am instrument -w -e mode send -e root FolderRegression-device-test -e peer <receiver-wifi-ip> x.vladgba.share.debug.test/x.vladgba.share.FolderTransferInstrumentation
 ```
 
 Verified on 2026-10-25 with a Moto G31 (Android 12/API 31) and PLU110 (Android 16/API 36),
