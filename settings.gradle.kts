@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "SendAnyway"
+rootProject.name = "pShare"
 include(":app")

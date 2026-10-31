@@ -63,11 +63,21 @@ if (signing != null && !signing.store.exists()) {
     signing = null
 }
 
+// Launcher label: generated @string/app_name = rootProject.name (override: -Pandroid.common.label=...).
+// Debug builds get a visible prefix so they can't be mistaken for release on the device
+// (override: -Pandroid.common.debugLabelPrefix=...). Do not define app_name in res/values.
+def appLabel = (root.findProperty('android.common.label') ?: root.name).toString()
+def debugLabelPrefix = (root.findProperty('android.common.debugLabelPrefix') ?: '@').toString()
+project.extensions.extraProperties.set('appLabel', appLabel)
+
 android {
+    buildFeatures.resValues = true
     defaultConfig {
         versionCode = vCode
         versionName = vName
+        resValue 'string', 'app_name', appLabel
     }
+    buildTypes.getByName('debug').resValue 'string', 'app_name', debugLabelPrefix + appLabel
     if (signing != null) {
         def release = signingConfigs.maybeCreate('release')
         release.storeFile = signing.store
