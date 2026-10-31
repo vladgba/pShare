@@ -6,7 +6,7 @@
     <string name="notif_receiving">Receiving from %1$s</string>
     <string name="notif_sent">Sent</string>
     <string name="notif_received">Received</string>
-    <string name="notif_received_text">%1$d item(s) from %2$s, saved to Download/SendAnyway</string>
+    <string name="notif_received_text">%1$d item(s) from %2$s, saved to Download/pShare</string>
     <string name="notif_failed">Transfer failed</string>
     <string name="headline">Share anything,\nwith any phone.</string>
     <string name="tagline">Pair with a QR code, then send over Wi-Fi or Bluetooth. If nothing else works, the data goes through a QR slideshow.</string>
@@ -118,4 +118,5 @@
     <string name="honeywell_hint">Point scanner at QR code and press the yellow SCAN button</string>
     <string name="switch_to_camera">Switch to Camera</string>
     <string name="switch_to_hardware_scanner">Switch to Hardware Scanner</string>
+    <string name="about">About</string>
 </resources>

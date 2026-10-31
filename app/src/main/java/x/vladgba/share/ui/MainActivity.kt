@@ -1,5 +1,8 @@
 package x.vladgba.share.ui
 
+import x.vladgba.share.pui.PAboutInfo
+import x.vladgba.share.pui.showPAbout
+
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
@@ -17,6 +20,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        findViewById<android.view.View>(R.id.btnAbout).setOnClickListener { showPAbout(PAboutInfo(repo = "pShare", license = false)) }
         pickingFiles = savedInstanceState?.getBoolean(STATE_PICKING_FILES) ?: false
 
         findViewById<View>(R.id.btnSendFiles).setOnClickListener { pickFiles() }
