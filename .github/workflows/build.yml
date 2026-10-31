@@ -1,10 +1,23 @@
+# Standard CI of the p* Android apps (template: configs/android/.github/workflows/build.yml,
+# generated per project by configs/android/workflows.py; edit the template, then regenerate).
+#
+# Every push to main / pull request / manual run: unit tests (if the project has any), then the
+# RELEASE APK, uploaded as a run artifact (Actions tab -> the run -> Artifacts). A v* tag also
+# attaches the APK to a GitHub release.
+#
+# Signing: add repo secrets RELEASE_KEYSTORE_BASE64 (base64 of the .jks/.keystore),
+# RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD to get APKs signed with the
+# real release key (installable over your own release builds). Without them the release APK is
+# signed with a throwaway debug key: still installable, but not as an update of a signed build.
 name: Build
 
 on:
   push:
     branches: [main]
     tags: ['v*']
+    paths-ignore: ['**.md', '.agentsroom/**', '.claude/**', '.agents/**']
   pull_request:
+    paths-ignore: ['**.md', '.agentsroom/**', '.claude/**', '.agents/**']
   workflow_dispatch:
 
 permissions:
@@ -13,6 +26,12 @@ permissions:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  APP_NAME: pShare
+  APK_DIR: app/build/outputs/apk/release
+  TEST_TASKS: "testDebugUnitTest"
+  RELEASE_TASK: assembleRelease
 
 jobs:
   build:
@@ -28,34 +47,41 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Optional release key. Without these secrets the APKs are signed with the CI debug key.
-      #   RELEASE_KEYSTORE_BASE64 (base64 of the .jks), RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD
+      # gradlew committed from Windows has no executable bit.
+      - name: Ensure gradlew is executable
+        run: chmod +x gradlew
+
+      - name: Unit tests
+        if: env.TEST_TASKS != ''
+        run: ./gradlew --no-daemon $TEST_TASKS
+
       - name: Decode release keystore
         env:
           KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-            echo "RELEASE_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "RELEASE_STORE_FILE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+            echo "Signing with the release key."
+          else
+            echo "::warning::No RELEASE_KEYSTORE_BASE64 secret: the release APK is signed with a debug key."
           fi
 
-      - name: Ensure gradlew is executable
-        run: chmod +x gradlew
-
-      - name: Unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest
-
-      - name: Assemble APKs
+      - name: Build release APK
         env:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon printVersion assembleDebug assembleRelease
+        run: ./gradlew --no-daemon printVersion $RELEASE_TASK
+
+      - name: Version
+        id: ver
+        run: echo "v=$(./gradlew --no-daemon -q printVersion | head -1 | tr -d '\r' | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SendAnyway-apk
-          path: app/build/outputs/apk/**/*.apk
+          name: ${{ env.APP_NAME }}-${{ steps.ver.outputs.v }}-release-apk
+          path: ${{ env.APK_DIR }}/*.apk
           if-no-files-found: error
 
       - name: Upload test reports
@@ -63,11 +89,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: app/build/reports/tests/
+          path: '**/build/reports/tests/'
+          if-no-files-found: ignore
 
       - name: GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/*.apk
+          files: ${{ env.APK_DIR }}/*.apk
           generate_release_notes: true
