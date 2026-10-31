@@ -128,7 +128,7 @@ class FolderTransferInstrumentation : Instrumentation() {
             onFolder = { name, _ -> folders += name },
             onFile = { name, location, uri, _ ->
                 checkNotNull(uri)
-                files["${location.substringAfter("SendAnyway/")}/$name"] =
+                files["${location.substringAfter("pShare/")}/$name"] =
                     targetContext.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
             })
         fun verify(root: String) {

@@ -130,7 +130,7 @@ object Device {
 }
 
 /**
- * Saves received files to Download/SendAnyway (MediaStore on Android 10+, no permission needed;
+ * Saves received files to Download/pShare (MediaStore on Android 10+, no permission needed;
  * the app's own external files dir on older versions). Text items are kept in memory.
  * Received folders are recreated with their hierarchy, empty ones included; a folder whose name
  * is taken is saved as "Name (1)" as a whole (see [ReceivedPaths]). Supports resuming interrupted
@@ -154,7 +154,7 @@ class DownloadSink(
 
     private val scoped get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
 
-    /** Real directory behind Download/SendAnyway: the public one on Android 10+, app-specific before. */
+    /** Real directory behind Download/pShare: the public one on Android 10+, app-specific before. */
     @Suppress("DEPRECATION")
     private val baseDir: File
         get() = if (scoped) File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), FOLDER)
@@ -334,7 +334,7 @@ class DownloadSink(
     }
 
     companion object {
-        const val FOLDER = "SendAnyway"
+        const val FOLDER = "pShare"
 
         fun safeSegment(name: String): String = ReceivedPaths.safeSegment(name)
     }

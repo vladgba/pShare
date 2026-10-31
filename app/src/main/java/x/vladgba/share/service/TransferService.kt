@@ -48,7 +48,7 @@ class TransferService : Service() {
         }
         if (wakeLock == null) {
             wakeLock = getSystemService(PowerManager::class.java)
-                ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SendAnyway:transfer")
+                ?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pShare:transfer")
                 ?.apply { setReferenceCounted(false); acquire() }
         }
         if (wifiLock == null) {
@@ -56,7 +56,7 @@ class TransferService : Service() {
             @Suppress("DEPRECATION")
             val mode = WifiManager.WIFI_MODE_FULL_HIGH_PERF
             wifiLock = applicationContext.getSystemService(WifiManager::class.java)
-                ?.createWifiLock(mode, "SendAnyway:transfer")
+                ?.createWifiLock(mode, "pShare:transfer")
                 ?.apply { setReferenceCounted(false); acquire() }
         }
         return START_NOT_STICKY // a killed transfer can't be resumed, don't restart empty
