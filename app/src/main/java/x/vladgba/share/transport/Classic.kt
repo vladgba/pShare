@@ -48,7 +48,7 @@ class ClassicServer(private val ctx: Context, private val uuid: UUID, private va
         if (!Bluetooth.hasPermissions(ctx, server = true)) return false
         val adapter = Bluetooth.adapter(ctx) ?: return false
         return try {
-            val ss = adapter.listenUsingInsecureRfcommWithServiceRecord("Send Anyway", uuid)
+            val ss = adapter.listenUsingInsecureRfcommWithServiceRecord("pShare", uuid)
             server = ss
             thread(name = "rfcomm-accept", isDaemon = true) {
                 while (true) {

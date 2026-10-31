@@ -1,4 +1,4 @@
-# Send Anyway
+# pShare
 
 Send files and text between two Android phones by whatever channel works:
 **Wi-Fi/LAN → Internet P2P → Bluetooth → QR slideshow.** Pairing is always a QR code.
@@ -40,7 +40,7 @@ accepts that UUID, so other phones are rejected quickly. Insecure RFCOMM avoids 
 
 ## Quick Settings shortcut
 
-Edit your phone's Quick Settings panel and add **Send files** (Send Anyway).
+Edit your phone's Quick Settings panel and add **Send files** (pShare).
 Tap the tile to choose one or more files and open the normal sending screen.
 If the phone is locked, unlock it first when prompted. Canceling the picker returns to the app.
 
