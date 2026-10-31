@@ -33,7 +33,9 @@ object PUi {
 
 fun Context.pDp(v: Float): Float = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics)
 fun Context.pDpi(v: Int): Int = pDp(v.toFloat()).toInt()
-fun Context.pColor(id: Int): Int = getColor(id)
+/** Color resource, theme-aware; also works below Android 6 (API 23), where Context.getColor is missing. */
+fun Context.pColor(id: Int): Int =
+    if (Build.VERSION.SDK_INT >= 23) getColor(id) else @Suppress("DEPRECATION") resources.getColor(id)
 
 /** Filled rounded shape with the suite ripple; [stroke] draws a 1dp outline. */
 fun Context.pShape(fill: Int, radiusDp: Float = PUi.RADIUS_M, stroke: Int? = null, ripple: Boolean = true): Drawable {

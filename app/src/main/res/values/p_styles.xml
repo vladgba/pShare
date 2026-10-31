@@ -21,7 +21,7 @@
         <item name="android:windowBackground">@color/p_bg</item>
         <item name="android:statusBarColor">@color/p_bg</item>
         <item name="android:navigationBarColor">@color/p_bg</item>
-        <item name="android:windowLightStatusBar">@bool/p_light_bars</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">@bool/p_light_bars</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">@bool/p_light_bars</item>
         <item name="android:buttonStyle">@style/P.Button.Tonal</item>
         <item name="android:borderlessButtonStyle">@style/P.Button.Text</item>
@@ -45,7 +45,7 @@
         <item name="android:windowBackground">@color/p_bg</item>
         <item name="android:statusBarColor">@color/p_bg</item>
         <item name="android:navigationBarColor">@color/p_bg</item>
-        <item name="android:windowLightStatusBar">@bool/p_light_bars</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">@bool/p_light_bars</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">@bool/p_light_bars</item>
         <item name="android:buttonStyle">@style/P.Button.Tonal</item>
         <item name="android:borderlessButtonStyle">@style/P.Button.Text</item>
