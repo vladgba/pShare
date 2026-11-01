@@ -1,10 +1,11 @@
 package x.vladgba.share.core
 
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
+import java.io.File
+import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.util.zip.CRC32
 import java.util.zip.Deflater
@@ -20,18 +21,45 @@ import java.util.zip.InflaterInputStream
  * receivers older than folder support save them as empty files.
  */
 object QrBundle {
-    /** Reads every item fully into memory — QR mode is only practical for small payloads anyway. */
-    fun build(items: List<OutgoingItem>): ByteArray {
-        val bos = ByteArrayOutputStream()
-        DataOutputStream(DeflaterOutputStream(bos, Deflater(Deflater.BEST_COMPRESSION))).use { out ->
-            out.writeShort(items.size)
-            for (item in items) {
-                val data = if (item.info.isDir) ByteArray(0) else item.open().use { it.readBytes() }
-                item.info.withSize(data.size.toLong()).write(out)
-                out.write(data)
-            }
-        }
-        return bos.toByteArray()
+    /** Spools source data and compression to disk; only the final compressed bundle lives in RAM. */
+    fun build(items: List<OutgoingItem>, tempDir: File? = null,
+              maxBundleBytes: Int = QrAssembler.MAX_BUNDLE): ByteArray {
+        require(items.size <= 0xFFFF) { "too many items for QR transfer" }
+        require(maxBundleBytes in 1..QrAssembler.MAX_BUNDLE)
+        val compressed = File.createTempFile("qr-bundle-", ".tmp", tempDir)
+        try {
+            val source = File.createTempFile("qr-source-", ".tmp", tempDir)
+            try {
+                val deflater = Deflater(Deflater.BEST_COMPRESSION)
+                try {
+                    compressed.outputStream().use { file ->
+                        val bounded = object : OutputStream() {
+                            private var written = 0
+                            override fun write(b: Int) = write(byteArrayOf(b.toByte()), 0, 1)
+                            override fun write(b: ByteArray, off: Int, len: Int) {
+                                if (len > maxBundleBytes - written) throw IOException("bundle too large for QR transfer")
+                                file.write(b, off, len)
+                                written += len
+                            }
+                        }
+                        DataOutputStream(DeflaterOutputStream(bounded, deflater)).use { out ->
+                            out.writeShort(items.size)
+                            for (item in items) {
+                                if (item.info.isDir) {
+                                    item.info.withSize(0).write(out)
+                                    continue
+                                }
+                                // The provider's declared size may be missing or stale. Open it only once.
+                                item.open().use { input -> source.outputStream().use { input.copyTo(it, 32 * 1024) } }
+                                item.info.withSize(source.length()).write(out)
+                                source.inputStream().use { it.copyTo(out, 32 * 1024) }
+                            }
+                        }
+                    }
+                } finally { deflater.end() }
+                return compressed.readBytes()
+            } finally { source.delete() }
+        } finally { compressed.delete() }
     }
 
     fun parse(bundle: ByteArray, sink: ReceiveSink): List<ItemInfo> {

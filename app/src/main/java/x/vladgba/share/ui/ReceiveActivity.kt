@@ -1,5 +1,7 @@
 package x.vladgba.share.ui
 
+import android.annotation.SuppressLint
+
 import android.Manifest
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -257,6 +259,7 @@ class ReceiveActivity : Activity() {
         }
     }
 
+    @SuppressLint("UnspecifiedRegisterReceiverFlag") // Legacy overload is guarded to API < 33 below.
     override fun onResume() {
         super.onResume()
         if (isUsingHoneywell) {

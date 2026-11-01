@@ -585,7 +585,7 @@ class SendActivity : Activity() {
         status.setText(R.string.preparing)
         thread(name = "qr-bundle", isDaemon = true) {
             try {
-                val b = QrBundle.build(items)
+                val b = QrBundle.build(items, cacheDir)
                 ui { if (!closed) { bundle = b; beginSlides() } }
             } catch (e: Exception) {
                 ui { if (!closed) showError(e) }
