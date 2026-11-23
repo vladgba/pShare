@@ -46,29 +46,29 @@ jobs:
         run: |
           case "$EVENT" in
             push)
-              TEXT="🔔 ${REPO}\n🚀 push by ${PUSH_AUTHOR} on ${PUSH_REF}\n${PUSH_MSG}\n${PUSH_COMPARE}"
+              TEXT=$(printf '🔔 %s\n🚀 push by %s on %s\n%s\n%s' "$REPO" "$PUSH_AUTHOR" "$PUSH_REF" "$PUSH_MSG" "$PUSH_COMPARE")
               ;;
             watch)
               if [ "$WATCH_ACTION" = "started" ]; then
-                TEXT="⭐ ${REPO}\n${SENDER} starred the repo"
+                TEXT=$(printf '⭐ %s\n%s starred the repo' "$REPO" "$SENDER")
               else
-                TEXT="👁 ${REPO}\n${SENDER} unwatched the repo"
+                TEXT=$(printf '👁 %s\n%s unwatched the repo' "$REPO" "$SENDER")
               fi
               ;;
             fork)
-              TEXT="🍴 ${REPO}\nforked by ${SENDER} → ${FORKEE}"
+              TEXT=$(printf '🍴 %s\nforked by %s' "$REPO" "$SENDER")
               ;;
             issues)
-              TEXT="📝 ${REPO}\nissue ${ISSUE_ACTION} by ${SENDER}\n#${ISSUE_NUM} ${ISSUE_TITLE}\n${ISSUE_URL}"
+              TEXT=$(printf '📝 %s\nissue %s by %s\n#%s %s\n%s' "$REPO" "$ISSUE_ACTION" "$SENDER" "$ISSUE_NUM" "$ISSUE_TITLE" "$ISSUE_URL")
               ;;
             pull_request)
-              TEXT="🔀 ${REPO}\nPR ${PR_ACTION} by ${SENDER}\n#${PR_NUM} ${PR_TITLE}\n${PR_URL}"
+              TEXT=$(printf '🔀 %s\nPR %s by %s\n#%s %s\n%s' "$REPO" "$PR_ACTION" "$SENDER" "$PR_NUM" "$PR_TITLE" "$PR_URL")
               ;;
             release)
-              TEXT="🏷 ${REPO}\nrelease ${REL_ACTION}\n${REL_NAME}\n${REL_URL}"
+              TEXT=$(printf '🏷 %s\nrelease %s\n%s\n%s' "$REPO" "$REL_ACTION" "$REL_NAME" "$REL_URL")
               ;;
             *)
-              TEXT="ℹ️ ${REPO}\nevent: ${EVENT}"
+              TEXT=$(printf 'ℹ️ %s\nevent: %s' "$REPO" "$EVENT")
               ;;
           esac
           curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
