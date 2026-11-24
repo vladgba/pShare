@@ -1,0 +1,2 @@
+Draft for version 1.0.0.
+Confirm the changes in the actual uploaded release before entering release notes. No invented changelog is supplied.

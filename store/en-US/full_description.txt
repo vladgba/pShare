@@ -1,0 +1,5 @@
+Pair two phones with a QR code and send files, folders or text over available channels.
+
+Transfer files and text using QR pairing and supported phone connections.
+
+Requires Android API 24 or later.
