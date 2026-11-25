@@ -1,0 +1,1 @@
+Transfer files and text using QR pairing and supported phone connections.

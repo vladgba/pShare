@@ -1,0 +1,75 @@
+{
+  "reviewed_on": "2026-11-16",
+  "relocated_on": "2026-11-17",
+  "apps": [
+    {
+      "slug": "pShare",
+      "name": "pShare",
+      "project": ".",
+      "module": "app",
+      "package": "x.vladgba.share",
+      "min_sdk": "24",
+      "target_sdk": "35",
+      "version_name": "1.0.0",
+      "version_code": null,
+      "version_source": "version.properties",
+      "commit": "ac3474938e4ba8f03eec553ae9c3dfa9c6003aa6",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_ADVERTISE",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.CAMERA",
+        "android.permission.CHANGE_NETWORK_STATE",
+        "android.permission.CHANGE_WIFI_STATE",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+        "android.permission.INTERNET",
+        "android.permission.NEARBY_WIFI_DEVICES",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "com.honeywell.decode.permission.DECODE"
+      ],
+      "permission_scope": "main source manifest only",
+      "removed_permissions": [],
+      "allow_backup": "false",
+      "source_evidence": {
+        "network": [
+          "app/src/main/java/x/vladgba/share/pui/PAbout.kt",
+          "app/src/main/java/x/vladgba/share/transport/Lan.kt",
+          "app/src/main/java/x/vladgba/share/transport/P2p.kt",
+          "app/src/main/java/x/vladgba/share/ui/ReceiveActivity.kt"
+        ],
+        "storage": [
+          "app/src/main/java/x/vladgba/share/data/AndroidItems.kt"
+        ],
+        "sharing": [
+          "app/src/main/java/x/vladgba/share/data/AndroidItems.kt",
+          "app/src/main/java/x/vladgba/share/ui/MainActivity.kt",
+          "app/src/main/java/x/vladgba/share/ui/ReceiveActivity.kt",
+          "app/src/main/java/x/vladgba/share/ui/SendActivity.kt"
+        ],
+        "learning_clipboard": [],
+        "speech_translation": []
+      },
+      "review_items": [
+        "Target SDK 35: below the current phone-app submission minimum of API 36, effective August 31, 2026 (extension ended November 1, 2026). See the official target API reference. Do not change a deliberate runtime target without redesign.",
+        "Owner must confirm developer identity/contact, production support and privacy URLs, countries, pricing, ads, target age and content rating.",
+        "Audit runtime traffic, dependencies and final merged release manifest before signing off Data safety. Source manifest alone is not a complete data audit.",
+        "Create a signed release AAB, test the release on a device and complete the Play Console testing/review requirements applicable to this account. No release binary was built by this documentation task."
+      ],
+      "publication_files": {
+        "store": "store",
+        "site": "docs/site/index.md",
+        "privacy": "docs/privacy-policy-draft.md"
+      }
+    }
+  ]
+}
