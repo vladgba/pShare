@@ -77,6 +77,21 @@ class MainWindow : JFrame("pShare - Windows PC") {
     private val lblProgressStats = JLabel("0 MB / 0 MB", SwingConstants.CENTER)
     private val btnOpenFolder = JButton("Open Received Folder")
 
+    // Send mode UI components
+    private val sendQrContainer = JPanel(BorderLayout())
+    private val sendQrImageLabel = JLabel("", SwingConstants.CENTER)
+    private val sendItemsTextArea = JTextArea(5, 40).apply {
+        isEditable = false
+        font = font.deriveFont(12f)
+    }
+    private val btnSendToggleScan = JButton("Scan Receiver QR Code (Frontal Camera)")
+
+    // Receive mode UI components
+    private val receiveCardLayout = CardLayout()
+    private val receiveCenterContainer = JPanel(receiveCardLayout)
+    private val receiveQrImageLabel = JLabel("", SwingConstants.CENTER)
+    private val btnReceiveToggle = JButton("Reverse Scan: Show My QR Code on Screen")
+
     init {
         defaultCloseOperation = EXIT_ON_CLOSE
         setSize(780, 640)
@@ -145,14 +160,6 @@ class MainWindow : JFrame("pShare - Windows PC") {
     }
 
     // -------------------------------- SEND MODE --------------------------------
-
-    private val sendQrContainer = JPanel(BorderLayout())
-    private val sendQrImageLabel = JLabel("", SwingConstants.CENTER)
-    private val sendItemsTextArea = JTextArea(5, 40).apply {
-        isEditable = false
-        font = font.deriveFont(12f)
-    }
-    private val btnSendToggleScan = JButton("Scan Receiver QR Code (Frontal Camera)")
 
     private fun setupSendPanel() {
         sendPanel.border = BorderFactory.createEmptyBorder(16, 16, 16, 16)
@@ -406,11 +413,6 @@ class MainWindow : JFrame("pShare - Windows PC") {
     }
 
     // -------------------------------- RECEIVE MODE --------------------------------
-
-    private val receiveCardLayout = CardLayout()
-    private val receiveCenterContainer = JPanel(receiveCardLayout)
-    private val receiveQrImageLabel = JLabel("", SwingConstants.CENTER)
-    private val btnReceiveToggle = JButton("Reverse Scan: Show My QR Code on Screen")
 
     private fun setupReceivePanel() {
         receivePanel.border = BorderFactory.createEmptyBorder(16, 16, 16, 16)
