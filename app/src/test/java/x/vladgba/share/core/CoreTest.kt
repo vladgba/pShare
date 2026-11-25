@@ -63,6 +63,13 @@ class CoreTest {
         assertArrayEquals(key, h.key)
         assertNull(Pairing.decode("hello".toByteArray()))
         assertNull(Pairing.decode(bytes.copyOf(20)))
+
+        // Reverse pairing (receiver generates code, isReceiver = true)
+        val pRecv = Pairing(id, key, "PC Receiver", 45123, emptyList(), false, isReceiver = true)
+        val recvBytes = pRecv.encode()
+        val dRecv = Pairing.decode(recvBytes)!!
+        assertTrue(dRecv.isReceiver)
+        assertEquals("PC Receiver", dRecv.deviceName)
     }
 
     /** Two connected in-memory "sockets". */
@@ -107,6 +114,38 @@ class CoreTest {
         assertEquals(0, sink.data[3]!!.size())
         assertTrue(sink.finished.values.all { it })
         assertEquals(300_000L + 70_000 + "Hello, світ!".toByteArray().size, lastProgress)
+    }
+
+    @Test
+    fun fullTransferWithReverseConnectionRoles() {
+        // Reverse scanning: receiver is the server (initiator = false), sender connects as client (initiator = true)
+        val (id, key) = Pairing.newSecrets()
+        val (a, b) = pipePair()
+        val items = listOf(
+            TextItem("Reverse scan payload!"),
+            BytesItem("test.bin", randomBytes(50_000, 42)),
+        )
+        var senderError: Throwable? = null
+        val sender = thread {
+            try {
+                // Sender connects as client -> initiator = true
+                val ch = SecureChannel(key, id, initiator = true, input = a.first, output = a.second)
+                assertEquals("receiver", Protocol.readHello(ch))
+                Protocol.send(ch, "sender", items, object : TransferListener {})
+            } catch (t: Throwable) { senderError = t }
+        }
+        // Receiver accepted connection -> initiator = false
+        val ch = SecureChannel(key, id, initiator = false, input = b.first, output = b.second)
+        val offer = Protocol.requestOffer(ch, "receiver")
+        assertEquals("sender", offer.peerName)
+        assertEquals(2, offer.items.size)
+        val sink = MemorySink()
+        Protocol.receive(ch, offer, sink, object : TransferListener {})
+        sender.join(5000)
+        senderError?.let { throw it }
+        assertEquals("Reverse scan payload!", sink.data[0]!!.toString("UTF-8"))
+        assertArrayEquals(randomBytes(50_000, 42), sink.data[1]!!.toByteArray())
+        assertTrue(sink.finished.values.all { it })
     }
 
     @Test(timeout = 20_000)
