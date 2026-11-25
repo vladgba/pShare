@@ -2,8 +2,11 @@ package x.vladgba.share.desktop
 
 import com.formdev.flatlaf.FlatClientProperties
 import com.formdev.flatlaf.FlatDarkLaf
+import x.vladgba.share.core.CodeAnnouncer
+import x.vladgba.share.core.CodeFinder
 import x.vladgba.share.core.OutgoingItem
 import x.vladgba.share.core.Pairing
+import x.vladgba.share.core.PairingCode
 import x.vladgba.share.core.Protocol
 import x.vladgba.share.core.SecureChannel
 import x.vladgba.share.core.TextItem
@@ -68,6 +71,8 @@ class MainWindow : JFrame("pShare - Windows PC") {
     private var sendItems = mutableListOf<OutgoingItem>()
     private var lanServer: LanServer? = null
     private var lanClient: LanClient? = null
+    private var codeAnnouncer: CodeAnnouncer? = null
+    private var codeFinder: CodeFinder? = null
     private val transferClaimed = AtomicBoolean(false)
 
     // Transfer UI components
@@ -80,16 +85,25 @@ class MainWindow : JFrame("pShare - Windows PC") {
     // Send mode UI components
     private val sendQrContainer = JPanel(BorderLayout())
     private val sendQrImageLabel = JLabel("", SwingConstants.CENTER)
+    private val lblSendPairingCode = JLabel("Pairing Code: ----", SwingConstants.CENTER).apply {
+        font = font.deriveFont(Font.BOLD, 18f)
+        foreground = Color(0x3B, 0x82, 0xF6)
+    }
     private val sendItemsTextArea = JTextArea(5, 40).apply {
         isEditable = false
         font = font.deriveFont(12f)
     }
     private val btnSendToggleScan = JButton("Scan Receiver QR Code (Frontal Camera)")
+    private val btnSendEnterCode = JButton("Pair by 4-Symbol Code...")
 
     // Receive mode UI components
     private val receiveCardLayout = CardLayout()
     private val receiveCenterContainer = JPanel(receiveCardLayout)
     private val receiveQrImageLabel = JLabel("", SwingConstants.CENTER)
+    private val lblReceivePairingCode = JLabel("Pairing Code: ----", SwingConstants.CENTER).apply {
+        font = font.deriveFont(Font.BOLD, 18f)
+        foreground = Color(0x10, 0xB9, 0x81)
+    }
     private val btnReceiveToggle = JButton("Reverse Scan: Show My QR Code on Screen")
 
     init {
@@ -234,9 +248,10 @@ class MainWindow : JFrame("pShare - Windows PC") {
                 add(btnClear)
             }
 
-            val qrBox = JPanel(BorderLayout()).apply {
-                border = BorderFactory.createTitledBorder("Pairing QR (Scan this with the receiving device)")
+            val qrBox = JPanel(BorderLayout(8, 8)).apply {
+                border = BorderFactory.createTitledBorder("Pairing QR & Code (Scan or enter code on receiving device)")
                 add(sendQrImageLabel, BorderLayout.CENTER)
+                add(lblSendPairingCode, BorderLayout.SOUTH)
             }
 
             add(fileControls, BorderLayout.NORTH)
@@ -252,20 +267,30 @@ class MainWindow : JFrame("pShare - Windows PC") {
                 font = font.deriveFont(Font.BOLD, 14f)
             }, BorderLayout.NORTH)
             add(cameraPreview, BorderLayout.CENTER)
-            val btnCancelScan = JButton("Cancel Webcam Scan").apply {
-                addActionListener {
-                    stopCamera()
-                    centerCardLayout.show(centerContainer, "MAIN")
+            val cameraControls = JPanel().apply {
+                val btnCancelScan = JButton("Cancel Webcam Scan").apply {
+                    addActionListener {
+                        stopCamera()
+                        centerCardLayout.show(centerContainer, "MAIN")
+                    }
                 }
+                val btnEnterCodeSender = JButton("Or Enter 4-Symbol Code...").apply {
+                    font = font.deriveFont(Font.BOLD, 13f)
+                    addActionListener {
+                        promptCodeAndConnect(asSender = true)
+                    }
+                }
+                add(btnCancelScan)
+                add(btnEnterCodeSender)
             }
-            add(btnCancelScan, BorderLayout.SOUTH)
+            add(cameraControls, BorderLayout.SOUTH)
         }
 
         centerContainer.add(sendMainView, "MAIN")
         centerContainer.add(sendCameraView, "CAMERA")
         sendPanel.add(centerContainer, BorderLayout.CENTER)
 
-        // Bottom toggle button for reverse scan
+        // Bottom toggle button for reverse scan & code
         val bottomBar = JPanel().apply {
             btnSendToggleScan.apply {
                 font = font.deriveFont(Font.BOLD, 14f)
@@ -278,7 +303,18 @@ class MainWindow : JFrame("pShare - Windows PC") {
                     startCameraForSender()
                 }
             }
+            btnSendEnterCode.apply {
+                font = font.deriveFont(Font.BOLD, 14f)
+                addActionListener {
+                    if (sendItems.isEmpty()) {
+                        JOptionPane.showMessageDialog(this@MainWindow, "Please select at least one file or enter text first.")
+                        return@addActionListener
+                    }
+                    promptCodeAndConnect(asSender = true)
+                }
+            }
             add(btnSendToggleScan)
+            add(btnSendEnterCode)
         }
         sendPanel.add(bottomBar, BorderLayout.SOUTH)
     }
@@ -327,6 +363,11 @@ class MainWindow : JFrame("pShare - Windows PC") {
         val qrBytes = pairing.encode()
         val img = DesktopQr.render(qrBytes, 280)
         sendQrImageLabel.icon = ImageIcon(img)
+
+        val code = PairingCode.generate()
+        lblSendPairingCode.text = "Pairing Code:  $code"
+        codeAnnouncer?.stop()
+        codeAnnouncer = CodeAnnouncer(code, qrBytes).start()
     }
 
     private fun startCameraForSender() {
@@ -440,15 +481,26 @@ class MainWindow : JFrame("pShare - Windows PC") {
                 font = font.deriveFont(Font.BOLD, 14f)
             }, BorderLayout.NORTH)
             add(cameraPreview, BorderLayout.CENTER)
+            val cameraControls = JPanel().apply {
+                val btnCode = JButton("Pair by 4-Symbol Code (No Camera)...").apply {
+                    font = font.deriveFont(Font.BOLD, 13f)
+                    addActionListener {
+                        promptCodeAndConnect(asSender = false)
+                    }
+                }
+                add(btnCode)
+            }
+            add(cameraControls, BorderLayout.SOUTH)
         }
 
         // 2) Reverse scan view: PC displays its own QR code on monitor for sender to scan
         val qrView = JPanel(BorderLayout(12, 12)).apply {
-            val qrBox = JPanel(BorderLayout()).apply {
-                border = BorderFactory.createTitledBorder("Receiver Pairing QR (Sender scans this code)")
+            val qrBox = JPanel(BorderLayout(8, 8)).apply {
+                border = BorderFactory.createTitledBorder("Receiver Pairing QR & Code (Sender scans or enters code)")
                 add(receiveQrImageLabel, BorderLayout.CENTER)
+                add(lblReceivePairingCode, BorderLayout.SOUTH)
             }
-            add(JLabel("The sender can now scan this code using their phone's camera", SwingConstants.CENTER).apply {
+            add(JLabel("The sender can now scan this code or enter the 4-symbol code", SwingConstants.CENTER).apply {
                 font = font.deriveFont(Font.PLAIN, 14f)
             }, BorderLayout.NORTH)
             add(qrBox, BorderLayout.CENTER)
@@ -556,6 +608,11 @@ class MainWindow : JFrame("pShare - Windows PC") {
         val qrBytes = pairing.encode()
         val img = DesktopQr.render(qrBytes, 280)
         receiveQrImageLabel.icon = ImageIcon(img)
+
+        val code = PairingCode.generate()
+        lblReceivePairingCode.text = "Pairing Code:  $code"
+        codeAnnouncer?.stop()
+        codeAnnouncer = CodeAnnouncer(code, qrBytes).start()
     }
 
     private fun startTransferAsReceiver(link: Link, key: ByteArray, sessionId: ByteArray, isClient: Boolean) {
@@ -681,6 +738,10 @@ class MainWindow : JFrame("pShare - Windows PC") {
         try { lanClient?.stop() } catch (_: Exception) {}
         lanServer = null
         lanClient = null
+        codeAnnouncer?.stop()
+        codeAnnouncer = null
+        codeFinder?.stop()
+        codeFinder = null
     }
 
     private fun cleanupReceive() {
@@ -689,6 +750,38 @@ class MainWindow : JFrame("pShare - Windows PC") {
         try { lanClient?.stop() } catch (_: Exception) {}
         lanServer = null
         lanClient = null
+        codeAnnouncer?.stop()
+        codeAnnouncer = null
+        codeFinder?.stop()
+        codeFinder = null
+    }
+
+    private fun promptCodeAndConnect(asSender: Boolean) {
+        val input = JOptionPane.showInputDialog(
+            this,
+            "Enter the 4-symbol pairing code shown on the other device:",
+            "Pair by Code",
+            JOptionPane.QUESTION_MESSAGE
+        ) ?: return
+        val code = input.trim()
+        if (code.length != 4) {
+            JOptionPane.showMessageDialog(this, "The code must be exactly 4 symbols.")
+            return
+        }
+        stopCamera()
+        showTransferScreen("Searching local network for code '$code'...")
+        codeFinder?.stop()
+        codeFinder = CodeFinder(code) { pairing ->
+            SwingUtilities.invokeLater {
+                codeFinder?.stop()
+                codeFinder = null
+                if (asSender) {
+                    connectToReceiver(pairing)
+                } else {
+                    connectToSender(pairing)
+                }
+            }
+        }.start()
     }
 
     private fun formatBytes(bytes: Long): String {

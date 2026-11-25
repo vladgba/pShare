@@ -119,4 +119,16 @@
     <string name="switch_to_camera">Switch to Camera</string>
     <string name="switch_to_hardware_scanner">Switch to Hardware Scanner</string>
     <string name="about">About</string>
+    <string name="scan_receiver_qr">Scan receiver\'s QR code</string>
+    <string name="point_camera_receiver">Point camera at the receiver\'s code</string>
+    <string name="show_receiver_qr">Show QR code</string>
+    <string name="show_receiver_qr_hint">Show this QR code to the sender</string>
+    <string name="switch_to_scanner">Scan sender\'s code</string>
+    <string name="pairing_code">Code: %s</string>
+    <string name="pair_with_code">Pair by 4-symbol code</string>
+    <string name="enter_code_title">Enter 4-symbol code</string>
+    <string name="enter_code_hint">4 symbols (e.g. 7B2K)</string>
+    <string name="connect">Connect</string>
+    <string name="searching_code">Searching for code %s…</string>
+    <string name="invalid_code">Please enter exactly 4 symbols</string>
 </resources>

@@ -88,6 +88,36 @@
                 android:text="@string/switch_to_camera" />
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/qrReceiveContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginBottom="12dp"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/qrReceive"
+                android:layout_width="240dp"
+                android:layout_height="240dp"
+                android:background="@drawable/bg_qr"
+                android:contentDescription="@string/show_receiver_qr"
+                android:padding="12dp"
+                android:scaleType="fitCenter" />
+
+            <TextView
+                android:id="@+id/pairingCodeTextReceive"
+                style="@style/Text.Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:letterSpacing="0.2"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
+        </LinearLayout>
+
         <!-- Floating controls -->
         <ImageButton
             android:id="@+id/btnBack"
@@ -96,6 +126,15 @@
             android:layout_margin="12dp"
             android:contentDescription="@string/back"
             android:src="@drawable/ic_arrow_back" />
+
+        <ImageButton
+            android:id="@+id/btnShowMyQr"
+            style="@style/IconButton.Scrim"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="68dp"
+            android:contentDescription="@string/show_receiver_qr"
+            android:src="@drawable/ic_qr_code" />
 
         <ImageButton
             android:id="@+id/btnTorch"
@@ -163,6 +202,12 @@
                         android:gravity="center_vertical"
                         android:text="@string/point_camera" />
                 </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnEnterCodeReceive"
+                    style="@style/Button.Tonal"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/pair_with_code" />
 
                 <ProgressBar
                     android:id="@+id/progress"

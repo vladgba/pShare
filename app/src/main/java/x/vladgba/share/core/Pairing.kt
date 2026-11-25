@@ -32,7 +32,7 @@ class Pairing(
     val deviceName: String,
     val lanPort: Int,
     val lanAddresses: List<ByteArray>,
-    val bluetooth: Boolean,
+    val bluetooth: Boolean = false,
     val wifiGroup: WifiGroup? = null,
     /** Sender registered with the P2P rendezvous server (see transport/P2p.kt). */
     val internet: Boolean = false,

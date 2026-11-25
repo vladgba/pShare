@@ -95,6 +95,37 @@
                     android:scaleType="fitCenter" />
 
                 <TextView
+                    android:id="@+id/pairingCodeText"
+                    style="@style/Text.Title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:letterSpacing="0.2"
+                    android:textColor="@color/accent"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <FrameLayout
+                    android:id="@+id/cameraBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="300dp"
+                    android:visibility="gone">
+
+                    <TextureView
+                        android:id="@+id/preview"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent" />
+
+                    <ImageView
+                        android:layout_width="180dp"
+                        android:layout_height="180dp"
+                        android:layout_gravity="center"
+                        android:alpha="0.8"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/viewfinder" />
+                </FrameLayout>
+
+                <TextView
                     android:id="@+id/status"
                     style="@style/Text.TitleSmall"
                     android:layout_width="match_parent"
@@ -185,6 +216,18 @@
                 style="@style/Button.Tonal"
                 android:layout_marginTop="16dp"
                 android:text="@string/use_qr_slideshow" />
+
+            <Button
+                android:id="@+id/btnScanReceiver"
+                style="@style/Button.Filled"
+                android:layout_marginTop="8dp"
+                android:text="@string/scan_receiver_qr" />
+
+            <Button
+                android:id="@+id/btnEnterCode"
+                style="@style/Button.Tonal"
+                android:layout_marginTop="8dp"
+                android:text="@string/pair_with_code" />
 
             <Button
                 android:id="@+id/btnWifiDirect"

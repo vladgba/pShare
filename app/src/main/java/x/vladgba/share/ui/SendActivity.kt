@@ -1,17 +1,23 @@
 package x.vladgba.share.ui
 
+import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
+import android.text.InputFilter
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.TextureView
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -21,23 +27,29 @@ import android.widget.TextView
 import android.widget.Toast
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import x.vladgba.share.R
+import x.vladgba.share.core.CodeAnnouncer
+import x.vladgba.share.core.CodeFinder
 import x.vladgba.share.core.OutgoingItem
 import x.vladgba.share.core.Pairing
+import x.vladgba.share.core.PairingCode
 import x.vladgba.share.core.Protocol
 import x.vladgba.share.core.QrBundle
 import x.vladgba.share.core.QrSlicer
 import x.vladgba.share.core.SecureChannel
 import x.vladgba.share.core.TextItem
 import x.vladgba.share.core.TransferListener
+import x.vladgba.share.core.Wire
 import x.vladgba.share.core.knownTotal
 import x.vladgba.share.data.Device
 import x.vladgba.share.data.UriItem
-import x.vladgba.share.service.TransferService
 import x.vladgba.share.qr.QrRender
+import x.vladgba.share.qr.QrScanner
+import x.vladgba.share.service.TransferService
 import x.vladgba.share.transport.Bluetooth
 import x.vladgba.share.transport.Classic
 import x.vladgba.share.transport.ClassicServer
 import x.vladgba.share.transport.Lan
+import x.vladgba.share.transport.LanClient
 import x.vladgba.share.transport.LanServer
 import x.vladgba.share.transport.Link
 import x.vladgba.share.transport.P2p
@@ -45,6 +57,7 @@ import x.vladgba.share.transport.P2pPeer
 import x.vladgba.share.transport.WifiDirect
 import x.vladgba.share.transport.WifiDirectHost
 import java.io.IOException
+import java.net.InetAddress
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -104,6 +117,19 @@ class SendActivity : Activity() {
     private var bundle: ByteArray? = null
     private var slicer: QrSlicer? = null
     private var frameIndex = 0L
+
+    private lateinit var cameraBox: View
+    private lateinit var preview: TextureView
+    private lateinit var btnScanReceiver: Button
+    private lateinit var pairingCodeText: TextView
+    private lateinit var btnEnterCode: Button
+    private var scanner: QrScanner? = null
+    private var isScanning = false
+    private var lanClient: LanClient? = null
+    private var codeAnnouncer: CodeAnnouncer? = null
+    private var codeFinder: CodeFinder? = null
+    private var myPairingCode: String? = null
+    private val REQ_CAMERA = 101
     private val tick = object : Runnable {
         override fun run() {
             val s = slicer ?: return
@@ -137,6 +163,13 @@ class SendActivity : Activity() {
         statusIcon = findViewById(R.id.statusIcon)
         channelsCard = findViewById(R.id.channelsCard)
         channelList = findViewById(R.id.channelList)
+        cameraBox = findViewById(R.id.cameraBox)
+        preview = findViewById(R.id.preview)
+        btnScanReceiver = findViewById(R.id.btnScanReceiver)
+        btnScanReceiver.setOnClickListener { toggleScanReceiver() }
+        pairingCodeText = findViewById(R.id.pairingCodeText)
+        btnEnterCode = findViewById(R.id.btnEnterCode)
+        btnEnterCode.setOnClickListener { showEnterCodeDialog() }
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
 
         myName = Device.name(this)
@@ -269,6 +302,10 @@ class SendActivity : Activity() {
                     directView.visibility = View.VISIBLE
                     directView.setText(R.string.wifi_direct_perm_denied)
                 }
+            REQ_CAMERA ->
+                if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                    startScanningReceiver()
+                }
         }
     }
 
@@ -276,6 +313,10 @@ class SendActivity : Activity() {
         super.onDestroy()
         closed = true
         mainHandler.removeCallbacks(tick)
+        stopScanningReceiver()
+        codeAnnouncer?.stop()
+        codeFinder?.stop()
+        lanClient?.stop()
         stopListeners()
         if (claimed.get() && TransferService.isActive) {
             // A transfer is running: let it finish in the background (foreground service).
@@ -328,7 +369,14 @@ class SendActivity : Activity() {
     private fun refreshPairing() {
         val base = basePairing ?: return
         val addrs = if (lan != null) Lan.localIpv4() else emptyList()
-        pairingQr = base.withWifiGroup(wifiGroup, addrs.map { it.address }).encode()
+        val qr = base.withWifiGroup(wifiGroup, addrs.map { it.address }).encode()
+        pairingQr = qr
+
+        if (myPairingCode == null) myPairingCode = PairingCode.generate()
+        pairingCodeText.text = getString(R.string.pairing_code, myPairingCode)
+        if (!slideshow && !claimed.get() && !isScanning) pairingCodeText.visibility = View.VISIBLE
+        codeAnnouncer?.stop()
+        codeAnnouncer = CodeAnnouncer(myPairingCode!!, qr).start()
 
         lanText = addrs.joinToString { it.hostAddress ?: "" }
         renderChannels()
@@ -452,17 +500,20 @@ class SendActivity : Activity() {
         )
     }
 
-    private fun onLink(link: Link) {
+    private fun onLink(link: Link, isClient: Boolean = false, keyOverride: ByteArray? = null, sessionOverride: ByteArray? = null) {
         thread(name = "send-session", isDaemon = true) {
             var mine = false
             try {
-                val ch = SecureChannel(key!!, sessionId!!, initiator = false, input = link.input, output = link.output)
+                val actualKey = keyOverride ?: key!!
+                val actualSession = sessionOverride ?: sessionId!!
+                val ch = SecureChannel(actualKey, actualSession, initiator = isClient, input = link.input, output = link.output)
                 val hello = Protocol.readPeer(ch)
                 val peer = hello.name
                 if (closed || !claimed.compareAndSet(false, true)) return@thread
                 mine = true
                 activeLink = link
                 stopListeners()
+                ui { stopScanningReceiver() }
                 // Open every file now, while this screen still holds read access to them.
                 items.forEach { (it as? UriItem)?.preopen() }
                 ui { onConnected(peer, link) }
@@ -487,6 +538,78 @@ class SendActivity : Activity() {
         }
     }
 
+    private fun toggleScanReceiver() {
+        if (!isScanning) {
+            if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.CAMERA), REQ_CAMERA)
+                return
+            }
+            startScanningReceiver()
+        } else {
+            stopScanningReceiver()
+        }
+    }
+
+    private fun startScanningReceiver() {
+        isScanning = true
+        qrView.visibility = View.GONE
+        qrSlides.visibility = View.GONE
+        pairingCodeText.visibility = View.GONE
+        btnEnterCode.visibility = View.GONE
+        cameraBox.visibility = View.VISIBLE
+        btnScanReceiver.setText(R.string.show_pairing_qr)
+        status.setText(R.string.point_camera_receiver)
+        scanner?.stop()
+        scanner = QrScanner(this, preview, ::onScannedCode, ::onCameraError).also { it.start() }
+    }
+
+    private fun stopScanningReceiver() {
+        if (!isScanning) return
+        isScanning = false
+        scanner?.stop()
+        scanner = null
+        cameraBox.visibility = View.GONE
+        btnEnterCode.visibility = View.VISIBLE
+        if (!slideshow) {
+            qrView.visibility = View.VISIBLE
+            pairingCodeText.visibility = View.VISIBLE
+            status.setText(R.string.scan_this)
+        }
+        btnScanReceiver.setText(R.string.scan_receiver_qr)
+    }
+
+    private fun onScannedCode(bytes: ByteArray) {
+        if (closed || claimed.get()) return
+        if (Wire.typeOf(bytes) != Wire.TYPE_PAIRING) return
+        val p = Pairing.decode(bytes) ?: return
+        if (!p.isReceiver) {
+            ui { status.setText(R.string.not_ours) }
+            return
+        }
+        vibrateTick()
+        ui {
+            stopScanningReceiver()
+            status.text = getString(R.string.connecting_to, p.deviceName)
+        }
+        connectToReceiver(p)
+    }
+
+    private fun connectToReceiver(p: Pairing) {
+        val addrs = p.lanAddresses.mapNotNull { runCatching { InetAddress.getByAddress(it) }.getOrNull() }
+        if (p.lanPort > 0 && addrs.isNotEmpty()) {
+            lanClient = LanClient(addrs, p.lanPort, { link ->
+                onLink(link, isClient = true, keyOverride = p.key, sessionOverride = p.sessionId)
+            }).also { it.start() }
+        }
+    }
+
+    private fun onCameraError(err: String) {
+        ui {
+            stopScanningReceiver()
+            Toast.makeText(this, err, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun stopListeners() {
         lan?.stop()
         p2p?.stop()
@@ -501,14 +624,20 @@ class SendActivity : Activity() {
             stalled = true
             activeLink?.close()
         }.also { it.start() }
+        codeAnnouncer?.stop()
+        codeFinder?.stop()
         slideshow = false
         mainHandler.removeCallbacks(tick)
         qrScreenMode(false)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         qrView.visibility = View.GONE
         qrSlides.visibility = View.GONE
+        pairingCodeText.visibility = View.GONE
+        btnEnterCode.visibility = View.GONE
         controls.visibility = View.GONE
         btnMode.visibility = View.GONE
+        btnScanReceiver.visibility = View.GONE
+        cameraBox.visibility = View.GONE
         btnDirect.visibility = View.GONE
         directView.visibility = View.GONE
         channelsCard.visibility = View.GONE
@@ -565,6 +694,7 @@ class SendActivity : Activity() {
         statusIcon.visibility = View.GONE
         qrSlides.visibility = View.GONE
         qrView.visibility = View.VISIBLE
+        if (myPairingCode != null && !isScanning) pairingCodeText.visibility = View.VISIBLE
         qrView.post { QrRender.show(qrView, QrRender.encode(qr, ErrorCorrectionLevel.M)) }
     }
 
@@ -607,9 +737,45 @@ class SendActivity : Activity() {
         status.text = text
         statusIcon.visibility = View.GONE
         qrView.visibility = View.GONE
+        pairingCodeText.visibility = View.GONE
         qrSlides.visibility = View.VISIBLE
         mainHandler.removeCallbacks(tick)
         mainHandler.post(tick)
+    }
+
+    private fun showEnterCodeDialog() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.enter_code_hint)
+            filters = arrayOf(InputFilter.LengthFilter(4))
+            gravity = Gravity.CENTER
+            textSize = 20f
+            isSingleLine = true
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.enter_code_title)
+            .setView(input)
+            .setPositiveButton(R.string.connect) { _, _ ->
+                val code = input.text.toString().trim()
+                if (code.length != 4) {
+                    Toast.makeText(this, R.string.invalid_code, Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                startPairingByCode(code)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun startPairingByCode(code: String) {
+        status.text = getString(R.string.searching_code, code)
+        codeFinder?.stop()
+        codeFinder = CodeFinder(code) { p ->
+            ui {
+                codeFinder?.stop()
+                codeFinder = null
+                connectToReceiver(p)
+            }
+        }.start()
     }
 
     private fun chunkSize() = 200 + frameSize.progress * 100      // 200..2900 bytes

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -15,6 +16,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.os.SystemClock
+import android.text.InputFilter
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.TextureView
@@ -22,14 +24,19 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import x.vladgba.share.R
+import x.vladgba.share.core.CodeAnnouncer
+import x.vladgba.share.core.CodeFinder
 import x.vladgba.share.core.Pairing
+import x.vladgba.share.core.PairingCode
 import x.vladgba.share.core.Protocol
 import x.vladgba.share.core.QrAssembler
 import x.vladgba.share.core.QrBundle
@@ -39,11 +46,14 @@ import x.vladgba.share.core.Wire
 import x.vladgba.share.data.Device
 import x.vladgba.share.data.DownloadSink
 import x.vladgba.share.qr.HoneywellScanner
+import x.vladgba.share.qr.QrRender
 import x.vladgba.share.qr.QrScanner
 import x.vladgba.share.service.TransferService
 import x.vladgba.share.transport.Bluetooth
 import x.vladgba.share.transport.ClassicClient
+import x.vladgba.share.transport.Lan
 import x.vladgba.share.transport.LanClient
+import x.vladgba.share.transport.LanServer
 import x.vladgba.share.transport.Link
 import x.vladgba.share.transport.P2p
 import x.vladgba.share.transport.P2pPeer
@@ -70,6 +80,11 @@ class ReceiveActivity : Activity() {
     private lateinit var viewfinder: View
     private lateinit var focusHint: TextView
     private lateinit var btnTorch: ImageButton
+    private lateinit var qrReceiveContainer: View
+    private lateinit var qrReceive: ImageView
+    private lateinit var pairingCodeTextReceive: TextView
+    private lateinit var btnEnterCodeReceive: Button
+    private lateinit var btnShowMyQr: ImageButton
     private lateinit var myName: String
     private val app by lazy { applicationContext }
 
@@ -79,6 +94,12 @@ class ReceiveActivity : Activity() {
     private var honeywellPanel: View? = null
     private var btnToggleScannerMode: Button? = null
     private var cameraAllowed = false
+    private var isShowingQr = false
+    private var lanServer: LanServer? = null
+    private var receiverPairing: Pairing? = null
+    private var codeAnnouncer: CodeAnnouncer? = null
+    private var codeFinder: CodeFinder? = null
+    private var myReceiverCode: String? = null
     private var pairing: Pairing? = null
     private var lanClient: LanClient? = null
     private var classicClient: ClassicClient? = null
@@ -119,6 +140,13 @@ class ReceiveActivity : Activity() {
         viewfinder = findViewById(R.id.viewfinder)
         focusHint = findViewById(R.id.focusHint)
         btnTorch = findViewById(R.id.btnTorch)
+        qrReceiveContainer = findViewById(R.id.qrReceiveContainer)
+        qrReceive = findViewById(R.id.qrReceive)
+        pairingCodeTextReceive = findViewById(R.id.pairingCodeTextReceive)
+        btnEnterCodeReceive = findViewById(R.id.btnEnterCodeReceive)
+        btnEnterCodeReceive.setOnClickListener { showEnterCodeDialog() }
+        btnShowMyQr = findViewById(R.id.btnShowMyQr)
+        btnShowMyQr.setOnClickListener { toggleShowMyQr() }
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         applyInsets()
         qrMap = findViewById(R.id.qrMap)
@@ -174,7 +202,7 @@ class ReceiveActivity : Activity() {
      * the bars aren't overlapped and the insets come through as zero.
      */
     private fun applyInsets() {
-        val floating = listOf(findViewById<View>(R.id.btnBack), btnTorch)
+        val floating = listOf(findViewById<View>(R.id.btnBack), btnShowMyQr, btnTorch)
         val sheet = findViewById<View>(R.id.sheet)
         findViewById<View>(R.id.root).setOnApplyWindowInsetsListener { _, insets ->
             @Suppress("DEPRECATION") val top = insets.systemWindowInsetTop
@@ -264,7 +292,7 @@ class ReceiveActivity : Activity() {
         super.onResume()
         if (isUsingHoneywell) {
             honeywellScanner?.onResume()
-        } else if (cameraAllowed && !transferring) {
+        } else if (cameraAllowed && !transferring && !isShowingQr) {
             scanner?.start()
         }
         val filter = IntentFilter().apply {
@@ -297,6 +325,9 @@ class ReceiveActivity : Activity() {
         honeywellScanner?.onDestroy()
         honeywellScanner = null
         scanner?.stop()
+        stopReceiverServer()
+        codeAnnouncer?.stop()
+        codeFinder?.stop()
         stopClients() // a Wi-Fi Direct group carrying the active link stays up until that link closes
         if (transferring && TransferService.isActive) return // keep going in the background
         watchdog?.stop()
@@ -306,12 +337,20 @@ class ReceiveActivity : Activity() {
     // ---- scanned codes ----------------------------------------------------------------------
 
     private fun onCode(bytes: ByteArray) {
-        if (closed || transferring) return
+        if (closed || transferring || isShowingQr) return
         when (Wire.typeOf(bytes)) {
             Wire.TYPE_PAIRING -> {
                 // Same session but different bytes = sender started/stopped Wi-Fi Direct: reconnect.
                 if (bytes.contentEquals(lastPairingBytes)) return
                 val p = Pairing.decode(bytes) ?: return
+                if (p.isReceiver) {
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastHint > 3000) {
+                        lastHint = now
+                        setStatus(Tone.WARNING, getString(R.string.not_ours))
+                    }
+                    return
+                }
                 lastPairingBytes = bytes
                 if (claimed.get()) return
                 vibrateTick()
@@ -416,6 +455,88 @@ class ReceiveActivity : Activity() {
         if (c.start()) classicClient = c
     }
 
+    private fun toggleShowMyQr() {
+        if (isShowingQr) {
+            stopReceiverServerAndQr()
+        } else {
+            startReceiverServerAndQr()
+        }
+    }
+
+    private fun startReceiverServerAndQr() {
+        if (closed || transferring) return
+        isShowingQr = true
+        scanner?.stop()
+        showCamera(false)
+        honeywellPanel?.visibility = View.GONE
+        qrReceiveContainer.visibility = View.VISIBLE
+        btnTorch.visibility = View.GONE
+        btnShowMyQr.setImageResource(R.drawable.ic_swap)
+        btnShowMyQr.contentDescription = getString(R.string.switch_to_scanner)
+
+        val (id, k) = Pairing.newSecrets()
+        lanServer?.stop()
+        lanServer = try {
+            LanServer { link ->
+                onIncomingSenderLink(link, k, id)
+            }.also { it.start() }
+        } catch (e: Exception) {
+            null
+        }
+
+        val addrs = Lan.localIpv4()
+        val p = Pairing(
+            sessionId = id,
+            key = k,
+            deviceName = myName,
+            lanPort = lanServer?.port ?: 0,
+            lanAddresses = addrs.map { it.address },
+            bluetooth = false,
+            isReceiver = true
+        )
+        receiverPairing = p
+        val qrBytes = p.encode()
+        QrRender.show(qrReceive, QrRender.encode(qrBytes, ErrorCorrectionLevel.M))
+        val code = PairingCode.generate()
+        myReceiverCode = code
+        pairingCodeTextReceive.text = getString(R.string.pairing_code, code)
+        codeAnnouncer?.stop()
+        codeAnnouncer = CodeAnnouncer(code, qrBytes).start()
+        setStatus(Tone.INFO, getString(R.string.show_receiver_qr_hint))
+    }
+
+    private fun stopReceiverServerAndQr() {
+        isShowingQr = false
+        stopReceiverServer()
+        codeAnnouncer?.stop()
+        codeAnnouncer = null
+        qrReceiveContainer.visibility = View.GONE
+        btnShowMyQr.setImageResource(R.drawable.ic_qr_code)
+        btnShowMyQr.contentDescription = getString(R.string.show_receiver_qr)
+        if (isUsingHoneywell) {
+            honeywellPanel?.visibility = View.VISIBLE
+            setStatus(Tone.INFO, getString(R.string.honeywell_ready))
+        } else {
+            showCamera(true)
+            setStatus(Tone.INFO, getString(R.string.point_camera))
+            if (cameraAllowed && !transferring) {
+                scanner?.start()
+                if (scanner?.hasFlash() == true) btnTorch.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun stopReceiverServer() {
+        lanServer?.stop()
+        lanServer = null
+        receiverPairing = null
+    }
+
+    private fun onIncomingSenderLink(link: Link, key: ByteArray, sessionId: ByteArray) {
+        val p = receiverPairing ?: return
+        onLink(p, link, isClient = false, keyOverride = key, sessionOverride = sessionId)
+    }
+
     private fun stopClients() {
         lanClient?.stop(); lanClient = null
         classicClient?.stop(); classicClient = null
@@ -426,17 +547,22 @@ class ReceiveActivity : Activity() {
 
     // ---- direct transfer --------------------------------------------------------------------
 
-    private fun onLink(p: Pairing, link: Link) {
+    private fun onLink(p: Pairing, link: Link, isClient: Boolean = true, keyOverride: ByteArray? = null, sessionOverride: ByteArray? = null) {
         thread(name = "receive-session", isDaemon = true) {
             var mine = false
             try {
-                val ch = SecureChannel(p.key, p.sessionId, initiator = true, input = link.input, output = link.output)
+                val actualKey = keyOverride ?: p.key
+                val actualSession = sessionOverride ?: p.sessionId
+                val ch = SecureChannel(actualKey, actualSession, initiator = isClient, input = link.input, output = link.output)
                 val offer = Protocol.requestOffer(ch, myName)
                 if (closed || !claimed.compareAndSet(false, true)) return@thread
                 mine = true
                 activeLink = link
                 ui {
                     stopClients()
+                    stopReceiverServer()
+                    qrReceive.visibility = View.GONE
+                    btnShowMyQr.visibility = View.GONE
                     onConnected(offer.items.count { !it.isDir }, offer.peerName, link)
                 }
                 val throttle = Throttle()
@@ -468,6 +594,10 @@ class ReceiveActivity : Activity() {
         btnTorch.visibility = View.GONE
         btnWifi.visibility = View.GONE
         btnCopyPassword.visibility = View.GONE
+        btnEnterCodeReceive.visibility = View.GONE
+        qrReceiveContainer.visibility = View.GONE
+        codeAnnouncer?.stop()
+        codeFinder?.stop()
         vibrateTick()
         meter = TransferMeter()
         watchdog = StallWatchdog(meter, STALL_LIMIT_MS) {
@@ -508,10 +638,49 @@ class ReceiveActivity : Activity() {
         lastPairingBytes = null
         claimed.set(false)
         honeywellScanner?.setContinuous(false)
-        if (cameraAllowed) {
+        btnShowMyQr.visibility = View.VISIBLE
+        btnEnterCodeReceive.visibility = View.VISIBLE
+        if (isShowingQr) {
+            stopReceiverServerAndQr()
+        } else if (cameraAllowed) {
             scanner?.start()
             if (scanner?.hasFlash() == true) btnTorch.visibility = View.VISIBLE
         }
+    }
+
+    private fun showEnterCodeDialog() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.enter_code_hint)
+            filters = arrayOf(InputFilter.LengthFilter(4))
+            gravity = Gravity.CENTER
+            textSize = 20f
+            isSingleLine = true
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.enter_code_title)
+            .setView(input)
+            .setPositiveButton(R.string.connect) { _, _ ->
+                val code = input.text.toString().trim()
+                if (code.length != 4) {
+                    Toast.makeText(this, R.string.invalid_code, Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                startPairingByCode(code)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun startPairingByCode(code: String) {
+        setStatus(Tone.WORKING, getString(R.string.searching_code, code))
+        codeFinder?.stop()
+        codeFinder = CodeFinder(code) { p ->
+            ui {
+                codeFinder?.stop()
+                codeFinder = null
+                connect(p)
+            }
+        }.start()
     }
 
     // ---- QR slideshow -----------------------------------------------------------------------

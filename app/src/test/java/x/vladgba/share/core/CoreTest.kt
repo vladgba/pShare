@@ -512,4 +512,38 @@ class CoreTest {
         assertNotNull(bundle)
         assertArrayEquals(data, bundle)
     }
+
+    @Test
+    fun pairingCodeGenerationAndMatching() {
+        val code = PairingCode.generate()
+        assertEquals(4, code.length)
+        assertTrue(PairingCode.isMatch(code, code))
+        assertTrue(PairingCode.isMatch(code.lowercase(), code.uppercase()))
+        assertTrue(PairingCode.isMatch(" 01ab ", "O1AB"))
+    }
+
+    @Test(timeout = 10_000)
+    fun pairingCodeDiscoveryLoopback() {
+        val (id, key) = Pairing.newSecrets()
+        val original = Pairing(id, key, "TestDevice", 9999, emptyList())
+        val code = "TEST"
+        val testPort = 54321
+        val announcer = CodeAnnouncer(code, original.encode(), port = testPort).start()
+        var discovered: Pairing? = null
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val finder = CodeFinder("test", port = testPort) { p ->
+            discovered = p
+            latch.countDown()
+        }.start()
+
+        assertTrue("CodeFinder did not discover pairing in time", latch.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        assertNotNull(discovered)
+        assertEquals(original.deviceName, discovered!!.deviceName)
+        assertEquals(original.lanPort, discovered!!.lanPort)
+        assertArrayEquals(original.sessionId, discovered!!.sessionId)
+        assertArrayEquals(original.key, discovered!!.key)
+
+        announcer.stop()
+        finder.stop()
+    }
 }
