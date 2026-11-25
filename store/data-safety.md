@@ -6,6 +6,8 @@ Status: REVIEW REQUIRED. This is not a Play Console import and does not assert t
 
 Selected files, text, pairing information and connection metadata are exchanged with the receiving device. Internet and discovery infrastructure need endpoint review before final disclosure.
 
+Folder sync (off by default): files from user-picked folders, file lists with hashes, device name and ID go only to paired devices on the local network over an encrypted connection; no server is involved.
+
 ## Required decisions
 
 For each data type below, decide whether data leaves the device, whether it is collected/shared under Google’s definitions and exemptions, whether processing is ephemeral, its purpose, whether it is required, its encryption in transit, retention, and deletion process. User-initiated transfers, service providers and local processing require classification under the official guidance; an Internet permission alone does not settle the answers.

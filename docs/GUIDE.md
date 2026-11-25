@@ -7,7 +7,8 @@ Send files and text between two Android phones by whatever channel works:
 - Kotlin, Android framework APIs only (no AndroidX, no Compose, no CameraX, no coroutines)
 - One runtime library: [`com.google.zxing:core`](https://github.com/zxing/zxing) for QR encode/decode
 - minSdk 24 (Android 7.0), targetSdk 35. Every transport works on all supported versions.
-- Release APK is ~100 KB
+- minSdk 24 for transfers; folder sync needs Android 8.0 (API 26) and is disabled on older phones
+- Release APK is ~290 KB
 
 ## How it works
 
@@ -67,8 +68,32 @@ app/src/main/java/x/vladgba/share/
 │                    P2p.kt (STUN + rendezvous + hole punching), UdpStream.kt (reliable stream over UDP)
 ├── qr/              QrRender (ZXing → Bitmap), QrScanner (camera2 → ZXing)
 ├── data/            UriItem (content:// input), DownloadSink (→ Download/pShare)
+├── sync/            folder sync UI and Android glue for the pSync engine: SyncHub (lazy object graph),
+│                    SyncService (dataSync foreground service), SafFileSystem, SyncActivity, FolderEditor
 └── ui/              MainActivity, SendActivity, ReceiveActivity
+
+sync-core/           pSync's sync engine, plain Kotlin/JVM (stdlib + JDK): index and version vectors,
+                     3-way text merge, rules, EC P-256 identities, encrypted protocol, LAN discovery
 ```
+
+## Folder sync
+
+The **Sync** card on the home screen opens the pSync engine, built into pShare. It is the same
+engine and wire protocol as the standalone pSync app, so pShare can pair and sync with pSync too.
+How sessions, conflicts, versions and the encryption work is described in the pSync guide.
+
+- Off until the user presses **Start**; after that it resumes whenever pShare opens.
+  Runs as a `dataSync` foreground service (rescan every minute, full sync every 15 minutes).
+- Pairing: both screens show a 6-digit code; confirm on both devices. Separate from the
+  one-time QR pairing of transfers.
+- Per-folder rules: Folder ID, direction (two-way, send only, receive only, move to peers),
+  include/exclude patterns, max file size, versions to keep, allowed devices.
+- Ports: UDP 47430 (discovery beacons) and TCP 47431 (sync; falls back to a random port if busy,
+  for example when pSync runs on the same phone). Use **Connect by address** when discovery is blocked.
+- Data lives in app-private `files/sync/` (identity key, peers, folder settings, indexes, version archive).
+- Android 15 limits `dataSync` services to about 6 h a day; the service stops itself and logs it.
+
+The engine in `sync-core/` is a copy of `pSync/core`. Keep the two in step when the protocol changes.
 
 ## Wire formats
 
@@ -104,6 +129,7 @@ Open the folder in Android Studio, or:
 ```
 ./gradlew assembleDebug          # app/build/outputs/apk/debug/SendAnyway-<version>-debug.apk
 ./gradlew testDebugUnitTest      # protocol, crypto, QR round-trip, reliable-UDP tests
+./gradlew :sync-core:runTests    # folder sync engine (built-in harness, no JUnit)
 P2P_IT=1 ./gradlew testDebugUnitTest   # + real STUN / rendezvous / hole-punch test (needs internet)
 ```
 

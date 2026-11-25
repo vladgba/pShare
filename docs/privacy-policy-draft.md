@@ -4,7 +4,7 @@ Reviewed 2026-11-16. Developer: vladgba. Contact: vladgba@gmail.com. Confirm the
 
 ## Data used by the app
 
-Selected files, text, pairing information and connection metadata are exchanged with the receiving device. Internet and discovery infrastructure need endpoint review before final disclosure.
+Selected files, text, pairing information and connection metadata are exchanged with the receiving device. When folder sync is turned on, files in the folders the user picked, file lists with hashes, the device name and device ID are exchanged with paired devices on the local network, encrypted; the device identity key, paired devices, folder settings, indexes and older file versions are kept in app-private storage. Internet and discovery infrastructure need endpoint review before final disclosure.
 
 ## Network and other services
 
@@ -27,6 +27,7 @@ Clear app data or uninstall to remove app-private data. This does not remove exp
 - `android.permission.BLUETOOTH_SCAN`
 - `android.permission.CAMERA`
 - `android.permission.CHANGE_NETWORK_STATE`
+- `android.permission.CHANGE_WIFI_MULTICAST_STATE`
 - `android.permission.CHANGE_WIFI_STATE`
 - `android.permission.FOREGROUND_SERVICE`
 - `android.permission.FOREGROUND_SERVICE_DATA_SYNC`

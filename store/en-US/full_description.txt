@@ -2,4 +2,6 @@ Pair two phones with a QR code and send files, folders or text over available ch
 
 Transfer files and text using QR pairing and supported phone connections.
 
+Folder sync keeps chosen folders in sync with your other devices on the same Wi-Fi network, after pairing with a 6-digit code. Folder sync requires Android 8.0 or later.
+
 Requires Android API 24 or later.
