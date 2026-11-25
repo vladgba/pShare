@@ -42,6 +42,9 @@ kotlin {
 }
 
 dependencies {
+    // Folder sync engine (from pSync), Kotlin + JDK only.
+    implementation(project(":sync-core"))
+
     // QR encode/decode.
     implementation("com.google.zxing:core:3.5.3")
 

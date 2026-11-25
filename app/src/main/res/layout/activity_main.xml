@@ -202,6 +202,63 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Folder sync (pSync engine) -->
+        <TextView
+            style="@style/Text.Overline"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="28dp"
+            android:text="@string/sync_section" />
+
+        <LinearLayout
+            android:id="@+id/btnSync"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card_clickable"
+            android:clickable="true"
+            android:contentDescription="@string/sync_title"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <ImageView
+                style="@style/HomeTileIcon"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_sync" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Text.Subtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/sync_title" />
+
+                <TextView
+                    android:id="@+id/syncHint"
+                    style="@style/Text.Caption"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/sync_hint" />
+            </LinearLayout>
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_arrow_forward"
+                android:tint="@color/fg" />
+        </LinearLayout>
+
         <!-- How it works -->
         <LinearLayout
             style="@style/Card"

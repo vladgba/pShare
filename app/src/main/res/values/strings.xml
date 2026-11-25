@@ -18,6 +18,10 @@
     <string name="send_files_hint">Any type</string>
     <string name="send_folder_hint">All its files</string>
     <string name="send_text_hint">Note or link</string>
+    <string name="sync_section">Sync</string>
+    <string name="sync_title">Folder sync</string>
+    <string name="sync_hint">Keep folders in sync with your other devices on the same Wi-Fi</string>
+    <string name="sync_unsupported">Folder sync needs Android 8.0 or newer.</string>
     <string name="how_title">How it works</string>
     <string name="how_1">Pick what to send. A pairing code appears on screen.</string>
     <string name="how_2">Scan it with pShare on the other phone.</string>

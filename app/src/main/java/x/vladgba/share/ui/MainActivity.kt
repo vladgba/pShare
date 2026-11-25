@@ -13,6 +13,9 @@ import android.view.View
 import android.widget.EditText
 import android.widget.FrameLayout
 import x.vladgba.share.R
+import x.vladgba.share.sync.SyncActivity
+import x.vladgba.share.sync.SyncHub
+import x.vladgba.share.sync.SyncService
 
 class MainActivity : Activity() {
     private var pickingFiles = false
@@ -34,6 +37,16 @@ class MainActivity : Activity() {
         findViewById<View>(R.id.btnSendText).setOnClickListener { askText() }
         findViewById<View>(R.id.btnReceive).setOnClickListener {
             startActivity(Intent(this, ReceiveActivity::class.java))
+        }
+        val sync = findViewById<View>(R.id.btnSync)
+        if (SyncHub.supported) {
+            sync.setOnClickListener { startActivity(Intent(this, SyncActivity::class.java)) }
+            // Resume background sync the user turned on earlier.
+            if (SyncHub.isEnabled(this)) SyncService.start(this)
+        } else {
+            sync.isEnabled = false
+            sync.alpha = 0.5f
+            findViewById<android.widget.TextView>(R.id.syncHint).setText(R.string.sync_unsupported)
         }
         if (savedInstanceState == null) handleQuickShare()
     }

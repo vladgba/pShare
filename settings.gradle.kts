@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "pShare"
-include(":app")
+include(":app", ":sync-core")
